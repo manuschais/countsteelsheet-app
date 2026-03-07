@@ -419,6 +419,35 @@
     /* Cursor variants by body mode */
     body.roi-select-mode   #canvas { cursor: crosshair; }
     body.manual-count-mode #canvas { cursor: cell; }
+    body.can-pan           #canvas { cursor: grab; }
+    body.panning           #canvas { cursor: grabbing !important; }
+
+    /* ---- Image adjustment panel ---- */
+    .img-adj-panel {
+      width: 100%;
+      max-width: 720px;
+      background: #fff;
+      border-radius: 10px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.07);
+      padding: 10px 16px;
+      margin-bottom: 12px;
+      display: none;
+      gap: 10px;
+      flex-wrap: wrap;
+      align-items: flex-end;
+    }
+    .img-adj-panel.visible { display: flex; }
+    .adj-field { display: flex; flex-direction: column; gap: 3px; flex: 1; min-width: 130px; }
+    .adj-field label {
+      display: flex; justify-content: space-between;
+      font-size: 0.78rem; color: #555; font-weight: 600;
+    }
+    .adj-field label span { color: #0f3460; font-weight: 700; }
+    .adj-field input[type=range] { width: 100%; accent-color: #0f3460; }
+    .btn-reset-adj {
+      padding: 6px 12px; border: 1.5px solid #aaa; border-radius: 6px;
+      background: #fff; font-size: 0.78rem; cursor: pointer; color: #666;
+    }
   </style>
 </head>
 <body>
@@ -558,6 +587,21 @@
     <button class="btn-sm gray" onclick="resetZoom()" title="รีเซ็ตซูม">1:1</button>
   </div>
 
+  <!-- Image adjustment panel -->
+  <div class="img-adj-panel" id="imgAdjPanel">
+    <div class="adj-field">
+      <label>ความสว่าง <span id="valBrightness">0</span></label>
+      <input type="range" id="paramBrightness" min="-100" max="100" step="5" value="0"
+             oninput="document.getElementById('valBrightness').textContent=this.value; onAdjChange()">
+    </div>
+    <div class="adj-field">
+      <label>ความคมชัด <span id="valContrast">0</span></label>
+      <input type="range" id="paramContrast" min="-50" max="100" step="5" value="0"
+             oninput="document.getElementById('valContrast').textContent=this.value; onAdjChange()">
+    </div>
+    <button class="btn-reset-adj" onclick="resetAdj()">รีเซ็ตภาพ</button>
+  </div>
+
   <!-- View toggle -->
   <div class="view-toggle">
     <button id="btnViewOriginal" class="active" onclick="switchView('original')">ภาพต้นฉบับ + เส้น</button>
@@ -594,6 +638,11 @@
       <button class="btn-sm orange" id="btnManualToggle" onclick="toggleManualMode()">เริ่มนับด้วยมือ</button>
       <button class="btn-sm red"    id="btnManualUndo"   onclick="undoManualDot()" disabled>ย้อน 1</button>
       <button class="btn-sm gray"   id="btnManualClear"  onclick="clearManualDots()">ล้างจุด</button>
+    </div>
+    <div class="adj-field" style="max-width:260px">
+      <label>ขนาดจุด <span id="valDotSize">1.0</span>×</label>
+      <input type="range" id="paramDotSize" min="0.4" max="3.0" step="0.1" value="1.0"
+             oninput="document.getElementById('valDotSize').textContent=parseFloat(this.value).toFixed(1); dotSizeMultiplier=parseFloat(this.value); redrawOverlays()">
     </div>
     <div class="manual-tally" id="manualTally">จิ้มที่แผ่นเหล็กแต่ละแผ่นเพื่อนับเพิ่ม</div>
   </div>
@@ -632,19 +681,29 @@
     let currentObjectURL = null;
 
     // ROI
-    let roi = null;            // {x,y,w,h} in canvas px, or null
+    let roi = null;
     let roiDragStart = null;
     let roiDragCurrent = null;
     let roiSelectActive = false;
     // Manual count
-    let manualDots = [];       // [{cx,cy,n}]
+    let manualDots = [];
     let autoCountResult = 0;
     let manualModeActive = false;
-    // Zoom
+    let dotSizeMultiplier = 1.0;
+    // Detected clusters (from CV)
+    let detectedClusters = [];   // [{avgY, lines, ox, removed}]
+    // Zoom + pan
     let zoomScale = 1;
+    let panX = 0, panY = 0;
     let pinchStartDist = null;
     let pinchStartScale = 1;
+    let pinchStartPanX = 0, pinchStartPanY = 0;
+    let isPanning = false;
+    let panPointerStart = null;
     let doubleTapTimer = null;
+    // Brightness / contrast
+    let brightnessAdj = 0;
+    let contrastAdj   = 0;
     // Debounce
     let processTimer = null;
 
@@ -708,14 +767,50 @@
       }, 700);
     }
 
-    // ---- Draw base image (CV result or original) ----
+    // ---- Brightness / contrast pixel adjustment ----
+    function getAdjustedImageData() {
+      if (!currentImageData) return null;
+      if (brightnessAdj === 0 && contrastAdj === 0) return currentImageData;
+      const src = currentImageData.data;
+      const adj = new ImageData(canvas.width, canvas.height);
+      const dst = adj.data;
+      const contrast   = 1 + contrastAdj / 100;
+      const brightness = brightnessAdj;
+      for (let i = 0; i < src.length; i += 4) {
+        for (let c = 0; c < 3; c++) {
+          let v = (src[i+c] - 128) * contrast + 128 + brightness;
+          dst[i+c] = Math.max(0, Math.min(255, Math.round(v)));
+        }
+        dst[i+3] = src[i+3];
+      }
+      return adj;
+    }
+
+    function onAdjChange() {
+      brightnessAdj = parseInt(document.getElementById('paramBrightness').value);
+      contrastAdj   = parseInt(document.getElementById('paramContrast').value);
+      redrawOverlays();
+      debouncedProcess();
+    }
+
+    function resetAdj() {
+      brightnessAdj = 0; contrastAdj = 0;
+      document.getElementById('paramBrightness').value = 0;
+      document.getElementById('paramContrast').value   = 0;
+      document.getElementById('valBrightness').textContent = '0';
+      document.getElementById('valContrast').textContent   = '0';
+      redrawOverlays();
+      debouncedProcess();
+    }
+
+    // ---- Draw base image (CV result or adjusted original) ----
     function drawBaseImage() {
       if (activeMode === 'cv' && currentView === 'edge' && lastEdgeMat) {
         cv.imshow(canvas, lastEdgeMat);
       } else if (activeMode === 'cv' && lastResultMat) {
         cv.imshow(canvas, lastResultMat);
       } else if (currentImageData) {
-        ctx.putImageData(currentImageData, 0, 0);
+        ctx.putImageData(getAdjustedImageData(), 0, 0);
       }
     }
 
@@ -738,7 +833,47 @@
         ctx.restore();
       }
 
-      // Thickness measurement lines (if in thickness mode)
+      // CV detected lines + cluster badges (drawn via ctx for interactivity)
+      if (activeMode === 'cv' && detectedClusters.length > 0) {
+        const lw = Math.max(2, canvas.width / 500);
+        const br = Math.max(14, canvas.width / 65);   // badge radius
+        let visIdx = 0;
+        detectedClusters.forEach(cl => {
+          const lx = cl.ox + br + 4, ly = Math.round(cl.avgY);
+          if (cl.removed) {
+            ctx.save();
+            ctx.globalAlpha = 0.18;
+            ctx.strokeStyle = '#aaa'; ctx.lineWidth = lw;
+            cl.lines.forEach(ln => {
+              ctx.beginPath(); ctx.moveTo(ln.x1, ln.y1); ctx.lineTo(ln.x2, ln.y2); ctx.stroke();
+            });
+            ctx.globalAlpha = 1;
+            ctx.fillStyle = 'rgba(150,150,150,0.45)';
+            ctx.beginPath(); ctx.arc(lx, ly, br, 0, Math.PI*2); ctx.fill();
+            ctx.strokeStyle = '#e94560'; ctx.lineWidth = Math.max(2, br * 0.18);
+            ctx.beginPath();
+            ctx.moveTo(lx - br*0.6, ly - br*0.6); ctx.lineTo(lx + br*0.6, ly + br*0.6);
+            ctx.stroke();
+            ctx.restore();
+          } else {
+            visIdx++;
+            ctx.save();
+            ctx.strokeStyle = '#ff3333'; ctx.lineWidth = lw;
+            cl.lines.forEach(ln => {
+              ctx.beginPath(); ctx.moveTo(ln.x1, ln.y1); ctx.lineTo(ln.x2, ln.y2); ctx.stroke();
+            });
+            ctx.fillStyle = '#ffc800';
+            ctx.beginPath(); ctx.arc(lx, ly, br, 0, Math.PI*2); ctx.fill();
+            ctx.fillStyle = '#000';
+            ctx.font = `bold ${Math.round(br * 1.05)}px sans-serif`;
+            ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+            ctx.fillText(String(visIdx), lx, ly);
+            ctx.restore();
+          }
+        });
+      }
+
+      // Thickness measurement lines
       if (activeMode === 'thickness' && measurePts.length > 0) {
         const colors = ['#facc15', '#f97316'];
         const labels = ['TOP', 'BOT'];
@@ -759,14 +894,14 @@
         });
         if (measurePts.length === 2) {
           const [y1, y2] = [Math.min(...measurePts), Math.max(...measurePts)];
-          const cx = canvas.width - 30;
+          const cx2 = canvas.width - 30;
           ctx.save();
           ctx.strokeStyle = '#22d3ee';
           ctx.lineWidth = Math.max(2, canvas.width / 400);
           ctx.beginPath();
-          ctx.moveTo(cx, y1); ctx.lineTo(cx, y2);
-          ctx.moveTo(cx-8, y1); ctx.lineTo(cx+8, y1);
-          ctx.moveTo(cx-8, y2); ctx.lineTo(cx+8, y2);
+          ctx.moveTo(cx2, y1); ctx.lineTo(cx2, y2);
+          ctx.moveTo(cx2-8, y1); ctx.lineTo(cx2+8, y1);
+          ctx.moveTo(cx2-8, y2); ctx.lineTo(cx2+8, y2);
           ctx.stroke();
           ctx.restore();
         }
@@ -774,19 +909,14 @@
 
       // Manual count dots
       manualDots.forEach(d => {
-        const r = Math.max(16, canvas.width / 55);
+        const r = Math.max(14, canvas.width / 65) * dotSizeMultiplier;
         ctx.save();
         ctx.fillStyle = '#f97316';
-        ctx.beginPath();
-        ctx.arc(d.cx, d.cy, r, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.strokeStyle = '#fff';
-        ctx.lineWidth = 2;
-        ctx.stroke();
+        ctx.beginPath(); ctx.arc(d.cx, d.cy, r, 0, Math.PI*2); ctx.fill();
+        ctx.strokeStyle = '#fff'; ctx.lineWidth = Math.max(2, r * 0.12); ctx.stroke();
         ctx.fillStyle = '#fff';
-        ctx.font = `bold ${Math.round(r * 1.1)}px sans-serif`;
-        ctx.textAlign = 'center';
-        ctx.textBaseline = 'middle';
+        ctx.font = `bold ${Math.round(r * 1.05)}px sans-serif`;
+        ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
         ctx.fillText(String(d.n), d.cx, d.cy);
         ctx.restore();
       });
@@ -813,7 +943,9 @@
         manualPanel.classList.remove('visible');
         manualDots = [];
         autoCountResult = 0;
+        detectedClusters = [];
         measurePts = [];
+        document.getElementById('imgAdjPanel').classList.add('visible');
         measInfo.textContent = '';
         if (activeMode === 'thickness') showMeasHint(0);
         setStatus(`โหลดภาพสำเร็จ: ${canvas.width} × ${canvas.height} px`, 'ok');
@@ -834,7 +966,8 @@
       resultBox.style.display = 'none';
       sheetCount.textContent  = '–';
       manualPanel.classList.remove('visible');
-      manualDots = []; autoCountResult = 0;
+      manualDots = []; autoCountResult = 0; detectedClusters = [];
+      document.getElementById('imgAdjPanel').classList.remove('visible');
       clearRoi();
       if (manualModeActive) toggleManualMode();
       resetZoom();
@@ -876,10 +1009,21 @@
     /* ============================================================
        Zoom — pinch (touch) + wheel (desktop)
     ============================================================ */
-    function applyZoom() {
-      zoomLayer.style.transform = zoomScale === 1 ? '' : `scale(${zoomScale})`;
+    function clampPan() {
+      const maxPx = canvasWrapper.clientWidth  * (zoomScale - 1) / 2;
+      const maxPy = canvasWrapper.clientHeight * (zoomScale - 1) / 2;
+      panX = Math.max(-maxPx, Math.min(maxPx, panX));
+      panY = Math.max(-maxPy, Math.min(maxPy, panY));
     }
-    function resetZoom() { zoomScale = 1; applyZoom(); }
+    function applyZoom() {
+      if (zoomScale <= 1) { panX = 0; panY = 0; }
+      zoomLayer.style.transform = zoomScale === 1
+        ? ''
+        : `translate(${panX}px, ${panY}px) scale(${zoomScale})`;
+      const canPan = zoomScale > 1 && !roiSelectActive && !manualModeActive;
+      document.body.classList.toggle('can-pan', canPan);
+    }
+    function resetZoom() { zoomScale = 1; panX = 0; panY = 0; applyZoom(); }
 
     function getPinchDist(touches) {
       const dx = touches[0].clientX - touches[1].clientX;
@@ -887,18 +1031,31 @@
       return Math.sqrt(dx * dx + dy * dy);
     }
 
+    let pinchCenterX = 0, pinchCenterY = 0;
+
     canvasWrapper.addEventListener('touchstart', (e) => {
       if (e.touches.length === 2) {
         pinchStartDist  = getPinchDist(e.touches);
         pinchStartScale = zoomScale;
+        pinchStartPanX  = panX;
+        pinchStartPanY  = panY;
+        // Pinch center relative to wrapper center
+        const wr = canvasWrapper.getBoundingClientRect();
+        pinchCenterX = ((e.touches[0].clientX + e.touches[1].clientX) / 2) - wr.left - wr.width  / 2;
+        pinchCenterY = ((e.touches[0].clientY + e.touches[1].clientY) / 2) - wr.top  - wr.height / 2;
         e.preventDefault();
       }
     }, { passive: false });
 
     canvasWrapper.addEventListener('touchmove', (e) => {
       if (e.touches.length === 2 && pinchStartDist) {
-        const dist = getPinchDist(e.touches);
-        zoomScale = Math.max(1, Math.min(6, pinchStartScale * dist / pinchStartDist));
+        const dist  = getPinchDist(e.touches);
+        const newScale = Math.max(1, Math.min(6, pinchStartScale * dist / pinchStartDist));
+        const ratio = newScale / pinchStartScale;
+        panX = pinchCenterX * (1 - ratio) + pinchStartPanX * ratio;
+        panY = pinchCenterY * (1 - ratio) + pinchStartPanY * ratio;
+        zoomScale = newScale;
+        clampPan();
         applyZoom();
         e.preventDefault();
       }
@@ -918,7 +1075,15 @@
 
     canvasWrapper.addEventListener('wheel', (e) => {
       e.preventDefault();
+      const wr = canvasWrapper.getBoundingClientRect();
+      const mx = e.clientX - wr.left - wr.width  / 2;
+      const my = e.clientY - wr.top  - wr.height / 2;
+      const prevScale = zoomScale;
       zoomScale = Math.max(1, Math.min(6, zoomScale * (e.deltaY > 0 ? 0.88 : 1.14)));
+      const ratio = zoomScale / prevScale;
+      panX = mx * (1 - ratio) + panX * ratio;
+      panY = my * (1 - ratio) + panY * ratio;
+      clampPan();
       applyZoom();
     }, { passive: false });
 
@@ -930,6 +1095,7 @@
       e.preventDefault();
       const pt = cssToCanvas(e.clientX, e.clientY);
 
+      // ROI drag
       if (roiSelectActive) {
         roiDragStart = pt;
         roiDragCurrent = pt;
@@ -937,6 +1103,22 @@
         return;
       }
 
+      // Cluster badge removal (CV mode) — tap on badge circle toggles removed
+      if (activeMode === 'cv' && detectedClusters.length > 0) {
+        const br = Math.max(14, canvas.width / 65);
+        for (const cl of detectedClusters) {
+          const lx = cl.ox + br + 4, ly = Math.round(cl.avgY);
+          if ((pt.x - lx) ** 2 + (pt.y - ly) ** 2 <= br * br) {
+            cl.removed = !cl.removed;
+            autoCountResult = detectedClusters.filter(c => !c.removed).length;
+            updateManualDisplay();
+            redrawOverlays();
+            return;
+          }
+        }
+      }
+
+      // Manual count tap
       if (manualModeActive) {
         const n = autoCountResult + manualDots.length + 1;
         manualDots.push({ cx: pt.x, cy: pt.y, n });
@@ -944,15 +1126,36 @@
         redrawOverlays();
         return;
       }
+
+      // Pan when zoomed (single pointer, no active modes)
+      if (zoomScale > 1) {
+        isPanning = true;
+        panPointerStart = { x: e.clientX - panX, y: e.clientY - panY };
+        canvas.setPointerCapture(e.pointerId);
+        document.body.classList.add('panning');
+      }
     });
 
     canvas.addEventListener('pointermove', (e) => {
+      if (isPanning) {
+        panX = e.clientX - panPointerStart.x;
+        panY = e.clientY - panPointerStart.y;
+        clampPan();
+        applyZoom();
+        return;
+      }
       if (!roiSelectActive || !roiDragStart) return;
       roiDragCurrent = cssToCanvas(e.clientX, e.clientY);
       redrawOverlays();
     });
 
     canvas.addEventListener('pointerup', (e) => {
+      if (isPanning) {
+        isPanning = false;
+        panPointerStart = null;
+        document.body.classList.remove('panning');
+        return;
+      }
       if (!roiSelectActive || !roiDragStart) return;
       const end = cssToCanvas(e.clientX, e.clientY);
       const r   = normalizeRect(roiDragStart, end);
@@ -977,6 +1180,7 @@
       btnZoneSelect.classList.toggle('active', active);
       document.body.classList.toggle('roi-select-mode', active);
       if (!active) { roiDragStart = null; roiDragCurrent = null; }
+      applyZoom();  // refresh can-pan class
     }
 
     function clearRoi() {
@@ -994,6 +1198,7 @@
       btnManualToggle.classList.toggle('active', manualModeActive);
       btnManualToggle.textContent = manualModeActive ? 'หยุดนับด้วยมือ' : 'เริ่มนับด้วยมือ';
       document.body.classList.toggle('manual-count-mode', manualModeActive);
+      applyZoom();  // refresh can-pan class
     }
 
     function undoManualDot() {
@@ -1134,6 +1339,7 @@
       if (!lastEdgeMat && !lastResultMat) return;
       if (mode === 'edge'     && lastEdgeMat)   cv.imshow(canvas, lastEdgeMat);
       if (mode === 'original' && lastResultMat) cv.imshow(canvas, lastResultMat);
+      redrawOverlays();
     }
 
     /* ============================================================
@@ -1216,25 +1422,21 @@
 
           // ── Step 7: Build result overlay image ─────────────────────
           resultMat = fullSrc.clone();
-          // Draw ROI border on result
+          // Draw ROI border on result (only border — lines/badges drawn via ctx)
           if (roi && roi.w > 20) {
             cv.rectangle(resultMat,
               new cv.Point(ox, oy),
               new cv.Point(ox + procSrc.cols, oy + procSrc.rows),
               new cv.Scalar(34, 211, 238, 255), 3);
           }
-          const cLine = new cv.Scalar(255, 50, 50, 255);
-          const cDot  = new cv.Scalar(255, 200, 0, 255);
-          clusters.forEach((cl, idx) => {
-            cl.lines.forEach(ln => {
-              cv.line(resultMat, new cv.Point(ln.x1, ln.y1), new cv.Point(ln.x2, ln.y2), cLine, 3);
-            });
-            const lx = ox + 18, ly = Math.round(cl.avgY);
-            cv.circle(resultMat, new cv.Point(lx, ly), 13, cDot, -1);
-            cv.putText(resultMat, String(idx+1),
-              new cv.Point(lx - (idx+1 < 10 ? 4 : 8), ly + 5),
-              cv.FONT_HERSHEY_SIMPLEX, 0.52, new cv.Scalar(0,0,0,255), 2);
-          });
+
+          // Store clusters for interactive overlay (drawn via redrawOverlays)
+          detectedClusters = clusters.map(cl => ({
+            lines:   cl.lines.map(l => ({ x1: l.x1, y1: l.y1, x2: l.x2, y2: l.y2 })),
+            avgY:    cl.avgY,
+            ox:      ox,
+            removed: false
+          }));
 
           // ── Step 8: Build edge display image ───────────────────────
           // Show edges in the processed region, original elsewhere
@@ -1257,7 +1459,7 @@
           redrawOverlays();  // draw ROI rect + manual dots on top
 
           // ── Step 10: Result ────────────────────────────────────────
-          autoCountResult = clusters.length;
+          autoCountResult = detectedClusters.filter(c => !c.removed).length;
           manualDots = [];   // reset manual dots when auto reruns
           displayResult(autoCountResult);
           setStatus(
