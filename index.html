@@ -148,6 +148,88 @@
 
     #opencvStatus.ready { background: #d4edda; color: #155724; }
     #opencvStatus.error { background: #f8d7da; color: #721c24; }
+
+    /* ---- Parameter panel ---- */
+    .param-panel {
+      width: 100%;
+      max-width: 720px;
+      background: #fff;
+      border-radius: 10px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.07);
+      margin-bottom: 16px;
+      overflow: hidden;
+    }
+
+    .param-panel summary {
+      padding: 10px 16px;
+      font-size: 0.88rem;
+      font-weight: 600;
+      color: #0f3460;
+      cursor: pointer;
+      user-select: none;
+      list-style: none;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .param-panel summary::before {
+      content: '▶';
+      font-size: 0.7rem;
+      transition: transform 0.2s;
+    }
+
+    .param-panel[open] summary::before { transform: rotate(90deg); }
+
+    .param-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+      gap: 12px;
+      padding: 0 16px 16px;
+    }
+
+    .param-item label {
+      display: flex;
+      justify-content: space-between;
+      font-size: 0.8rem;
+      color: #555;
+      margin-bottom: 4px;
+    }
+
+    .param-item label span { font-weight: 700; color: #0f3460; }
+
+    .param-item input[type=range] {
+      width: 100%;
+      accent-color: #0f3460;
+    }
+
+    /* ---- Mode toggle ---- */
+    .view-toggle {
+      display: flex;
+      gap: 8px;
+      width: 100%;
+      max-width: 720px;
+      margin-bottom: 12px;
+    }
+
+    .view-toggle button {
+      flex: 1;
+      padding: 6px 12px;
+      border: 2px solid #ddd;
+      border-radius: 6px;
+      background: #fff;
+      font-size: 0.82rem;
+      font-weight: 600;
+      cursor: pointer;
+      color: #555;
+      transition: all 0.2s;
+    }
+
+    .view-toggle button.active {
+      border-color: #0f3460;
+      color: #0f3460;
+      background: #eef2ff;
+    }
   </style>
 </head>
 <body>
@@ -185,6 +267,49 @@
     <button class="btn btn-reset"   id="btnReset"   disabled>
       รีเซ็ต
     </button>
+  </div>
+
+  <!-- Parameter panel -->
+  <details class="param-panel" id="paramPanel">
+    <summary>ปรับพารามิเตอร์การตรวจจับ</summary>
+    <div class="param-grid">
+      <div class="param-item">
+        <label>Blur kernel <span id="valBlur">5</span></label>
+        <input type="range" id="paramBlur" min="1" max="15" step="2" value="5"
+               oninput="document.getElementById('valBlur').textContent=this.value">
+      </div>
+      <div class="param-item">
+        <label>Canny low <span id="valCannyLow">50</span></label>
+        <input type="range" id="paramCannyLow" min="5" max="150" step="5" value="50"
+               oninput="document.getElementById('valCannyLow').textContent=this.value">
+      </div>
+      <div class="param-item">
+        <label>Canny high <span id="valCannyHigh">150</span></label>
+        <input type="range" id="paramCannyHigh" min="50" max="400" step="10" value="150"
+               oninput="document.getElementById('valCannyHigh').textContent=this.value">
+      </div>
+      <div class="param-item">
+        <label>Min line length % <span id="valMinLen">25</span></label>
+        <input type="range" id="paramMinLen" min="5" max="80" step="5" value="25"
+               oninput="document.getElementById('valMinLen').textContent=this.value">
+      </div>
+      <div class="param-item">
+        <label>Cluster tolerance px <span id="valTolerance">20</span></label>
+        <input type="range" id="paramTolerance" min="5" max="60" step="5" value="20"
+               oninput="document.getElementById('valTolerance').textContent=this.value">
+      </div>
+      <div class="param-item">
+        <label>Max line gap px <span id="valGap">20</span></label>
+        <input type="range" id="paramGap" min="5" max="80" step="5" value="20"
+               oninput="document.getElementById('valGap').textContent=this.value">
+      </div>
+    </div>
+  </details>
+
+  <!-- View toggle -->
+  <div class="view-toggle">
+    <button id="btnViewOriginal" class="active" onclick="switchView('original')">ภาพต้นฉบับ + เส้น</button>
+    <button id="btnViewEdge"                    onclick="switchView('edge')">Edge detection</button>
   </div>
 
   <!-- Canvas display area -->
@@ -318,7 +443,11 @@
       if (e.target.files[0]) drawImageToCanvas(e.target.files[0]);
     });
 
-    btnReset.addEventListener('click', resetAll);
+    btnReset.addEventListener('click', () => {
+      resetAll();
+      if (lastEdgeMat)   { try { lastEdgeMat.delete();   } catch(_){} lastEdgeMat   = null; }
+      if (lastResultMat) { try { lastResultMat.delete();  } catch(_){} lastResultMat = null; }
+    });
 
     btnProcess.addEventListener('click', () => {
       if (!currentImageData) {
@@ -329,64 +458,154 @@
     });
 
     /* ============================================================
-       Image Processing  (stub — implement edge detection here)
+       View state — keeps original ImageData for toggling views
+    ============================================================ */
+    let lastEdgeMat   = null;   // cv.Mat of edge image (RGBA)
+    let lastResultMat = null;   // cv.Mat of original + overlay lines
+    let currentView   = 'original';
+
+    function switchView(mode) {
+      currentView = mode;
+      document.getElementById('btnViewOriginal').classList.toggle('active', mode === 'original');
+      document.getElementById('btnViewEdge').classList.toggle('active', mode === 'edge');
+      if (!lastEdgeMat && !lastResultMat) return;
+      if (mode === 'edge'     && lastEdgeMat)   cv.imshow(canvas, lastEdgeMat);
+      if (mode === 'original' && lastResultMat) cv.imshow(canvas, lastResultMat);
+    }
+
+    /* ============================================================
+       Image Processing — Canny + HoughLinesP
     ============================================================ */
     function processImage() {
       if (typeof cv === 'undefined') {
         setStatus('OpenCV ยังไม่พร้อม กรุณารอสักครู่...', 'error');
         return;
       }
+      if (!currentImageData) {
+        setStatus('กรุณาโหลดภาพก่อน', 'error');
+        return;
+      }
 
       setStatus('กำลังประมวลผล...', 'info');
       btnProcess.disabled = true;
 
-      // --- สเตปถัดไป: ใส่ logic ตรวจจับเส้นขอบแผ่นเหล็กที่นี่ ---
-      //
-      // ตัวอย่างขั้นตอนที่จะมาเพิ่ม:
-      //   1. cv.imread / สร้าง Mat จาก canvas
-      //   2. แปลงเป็น Grayscale  → cv.cvtColor
-      //   3. Gaussian Blur       → cv.GaussianBlur
-      //   4. Canny Edge          → cv.Canny
-      //   5. HoughLines / Contour → นับแผ่น
-      //   6. วาดผลลัพธ์กลับบน canvas → cv.imshow
-      //
-      // ตัวอย่างโครงสร้าง (ยังไม่ activate):
-      /*
-      const src  = cv.imread(canvas);
-      const gray = new cv.Mat();
-      const blur = new cv.Mat();
-      const edges= new cv.Mat();
-
-      cv.cvtColor(src, gray, cv.COLOR_RGBA2GRAY);
-      cv.GaussianBlur(gray, blur, new cv.Size(5,5), 0);
-      cv.Canny(blur, edges, 50, 150);
-
-      cv.imshow(canvas, edges);
-
-      const count = detectSheets(edges);   // ← function ที่จะ implement
-      displayResult(count);
-
-      src.delete(); gray.delete(); blur.delete(); edges.delete();
-      */
-
-      // Placeholder result (ลบออกเมื่อ implement จริง)
+      // Defer to allow the browser to repaint status first
       setTimeout(() => {
-        setStatus('ประมวลผลเสร็จสิ้น (stub — รอ implement)', 'ok');
-        displayResult('?');
-        btnProcess.disabled = false;
-      }, 500);
-    }
+        let src, gray, blurred, edges, edgeRGBA, lines, resultMat;
+        try {
+          // Read params
+          let   ksize     = parseInt(document.getElementById('paramBlur').value);
+          const cannyLow  = parseInt(document.getElementById('paramCannyLow').value);
+          const cannyHigh = parseInt(document.getElementById('paramCannyHigh').value);
+          const minLenPct = parseInt(document.getElementById('paramMinLen').value) / 100;
+          const tolerance = parseInt(document.getElementById('paramTolerance').value);
+          const maxGap    = parseInt(document.getElementById('paramGap').value);
+          if (ksize % 2 === 0) ksize += 1; // must be odd
 
-    function detectSheets(edgeMat) {
-      // TODO: implement sheet-counting logic
-      // คืนค่าเป็นตัวเลขจำนวนแผ่นที่ตรวจพบ
-      return 0;
+          // ── Step 1: imread ──────────────────────────────────────
+          src = cv.imread(canvas);
+
+          // ── Step 2: Grayscale ───────────────────────────────────
+          gray = new cv.Mat();
+          cv.cvtColor(src, gray, cv.COLOR_RGBA2GRAY);
+
+          // ── Step 3: Gaussian Blur ───────────────────────────────
+          blurred = new cv.Mat();
+          cv.GaussianBlur(gray, blurred, new cv.Size(ksize, ksize), 0);
+
+          // ── Step 4: Canny edge detection ────────────────────────
+          edges = new cv.Mat();
+          cv.Canny(blurred, edges, cannyLow, cannyHigh);
+
+          // Convert edges (grayscale) → RGBA for display / storage
+          edgeRGBA = new cv.Mat();
+          cv.cvtColor(edges, edgeRGBA, cv.COLOR_GRAY2RGBA);
+
+          // ── Step 5: HoughLinesP ─────────────────────────────────
+          lines = new cv.Mat();
+          const minLen = canvas.width * minLenPct;
+          cv.HoughLinesP(edges, lines, 1, Math.PI / 180, 40, minLen, maxGap);
+
+          // ── Step 6: Filter horizontal lines ─────────────────────
+          const horiz = [];
+          for (let i = 0; i < lines.rows; i++) {
+            const x1 = lines.data32S[i * 4];
+            const y1 = lines.data32S[i * 4 + 1];
+            const x2 = lines.data32S[i * 4 + 2];
+            const y2 = lines.data32S[i * 4 + 3];
+            const angleDeg = Math.abs(Math.atan2(y2 - y1, x2 - x1) * 180 / Math.PI);
+            // Keep lines within ±15° of horizontal
+            if (angleDeg < 15 || angleDeg > 165) {
+              horiz.push({ x1, y1, x2, y2, midY: (y1 + y2) / 2 });
+            }
+          }
+
+          // ── Step 7: Cluster lines by Y-position ─────────────────
+          horiz.sort((a, b) => a.midY - b.midY);
+          const clusters = [];
+          for (const ln of horiz) {
+            const last = clusters[clusters.length - 1];
+            if (!last || ln.midY - last.avgY > tolerance) {
+              clusters.push({ lines: [ln], avgY: ln.midY });
+            } else {
+              last.lines.push(ln);
+              last.avgY = last.lines.reduce((s, l) => s + l.midY, 0) / last.lines.length;
+            }
+          }
+
+          // ── Step 8: Draw overlay on original ────────────────────
+          resultMat = src.clone();
+          const colorLine = new cv.Scalar(255, 50, 50, 255);   // red
+          const colorDot  = new cv.Scalar(255, 200, 0, 255);   // yellow
+          clusters.forEach((cl, idx) => {
+            cl.lines.forEach(ln => {
+              cv.line(resultMat,
+                new cv.Point(ln.x1, ln.y1),
+                new cv.Point(ln.x2, ln.y2),
+                colorLine, 3);
+            });
+            // Label cluster index at left edge
+            const labelY = Math.round(cl.avgY);
+            cv.circle(resultMat, new cv.Point(18, labelY), 12, colorDot, -1);
+            cv.putText(resultMat, String(idx + 1),
+              new cv.Point(idx + 1 < 10 ? 12 : 8, labelY + 5),
+              cv.FONT_HERSHEY_SIMPLEX, 0.5, new cv.Scalar(0, 0, 0, 255), 2);
+          });
+
+          // Save for view-toggle
+          if (lastEdgeMat)   { lastEdgeMat.delete();   }
+          if (lastResultMat) { lastResultMat.delete();  }
+          lastEdgeMat   = edgeRGBA.clone();
+          lastResultMat = resultMat.clone();
+          edgeRGBA = null; // don't delete in finally — stored above
+
+          // Show current view
+          cv.imshow(canvas, currentView === 'edge' ? lastEdgeMat : lastResultMat);
+
+          // ── Step 9: Result ───────────────────────────────────────
+          const sheetCount = clusters.length;
+          displayResult(sheetCount);
+          setStatus(
+            `ตรวจพบ ${sheetCount} กลุ่มเส้นขอบ จากเส้นแนวนอน ${horiz.length} เส้น (ทั้งหมด ${lines.rows} เส้น)`,
+            'ok'
+          );
+
+        } catch (err) {
+          setStatus('เกิดข้อผิดพลาด: ' + err.message, 'error');
+          console.error(err);
+        } finally {
+          [src, gray, blurred, edges, edgeRGBA, lines, resultMat]
+            .forEach(m => { try { if (m && !m.isDeleted()) m.delete(); } catch(_){} });
+          btnProcess.disabled = false;
+        }
+      }, 50);
     }
 
     function displayResult(count) {
       sheetCount.textContent  = count;
       resultBox.style.display = 'block';
     }
+
   </script>
 </body>
 </html>
