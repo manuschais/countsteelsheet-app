@@ -347,7 +347,78 @@
       z-index: 10;
     }
 
-    .canvas-wrapper { position: relative; }
+    .canvas-wrapper { position: relative; touch-action: none; }
+
+    /* ---- Zoom layer ---- */
+    #zoomLayer {
+      width: 100%;
+      height: 100%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transform-origin: center center;
+      will-change: transform;
+    }
+
+    /* ---- Small action buttons ---- */
+    .btn-sm {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      padding: 6px 13px;
+      border: 2px solid;
+      border-radius: 6px;
+      font-size: 0.82rem;
+      font-weight: 600;
+      cursor: pointer;
+      background: #fff;
+      transition: all 0.2s;
+      white-space: nowrap;
+    }
+    .btn-sm.teal   { border-color: #0891b2; color: #0891b2; }
+    .btn-sm.teal.active { background: #0891b2; color: #fff; }
+    .btn-sm.red    { border-color: #e94560; color: #e94560; }
+    .btn-sm.orange { border-color: #f97316; color: #f97316; }
+    .btn-sm.orange.active { background: #f97316; color: #fff; }
+    .btn-sm.gray   { border-color: #aaa; color: #666; }
+    .btn-sm:disabled { opacity: 0.38; cursor: not-allowed; }
+
+    /* ---- Zone / manual toolbars ---- */
+    .sub-toolbar {
+      display: flex;
+      gap: 8px;
+      width: 100%;
+      max-width: 720px;
+      margin-bottom: 12px;
+      flex-wrap: wrap;
+      align-items: center;
+    }
+    .sub-toolbar .label {
+      font-size: 0.78rem;
+      color: #888;
+      flex: 1;
+    }
+
+    /* ---- Manual count panel ---- */
+    .manual-panel {
+      display: none;
+      width: 100%;
+      max-width: 720px;
+      background: #fff;
+      border-radius: 10px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.07);
+      padding: 14px 16px;
+      margin-top: 10px;
+      flex-direction: column;
+      gap: 10px;
+    }
+    .manual-panel.visible { display: flex; }
+    .manual-tally { font-size: 0.88rem; color: #444; min-height: 18px; }
+    .manual-tally strong { font-size: 1.05rem; color: #0f3460; }
+
+    /* Cursor variants by body mode */
+    body.roi-select-mode   #canvas { cursor: crosshair; }
+    body.manual-count-mode #canvas { cursor: cell; }
   </style>
 </head>
 <body>
@@ -479,6 +550,14 @@
     </div>
   </details>
 
+  <!-- Zone select toolbar (CV mode only) -->
+  <div class="sub-toolbar" id="zoneToolbar">
+    <button class="btn-sm teal" id="btnZoneSelect" onclick="toggleRoiSelect()" disabled>เลือกโซน ROI</button>
+    <button class="btn-sm red"  id="btnZoneClear"  onclick="clearRoi()" style="display:none">ล้างโซน</button>
+    <span class="label" id="zoneInfo"></span>
+    <button class="btn-sm gray" onclick="resetZoom()" title="รีเซ็ตซูม">1:1</button>
+  </div>
+
   <!-- View toggle -->
   <div class="view-toggle">
     <button id="btnViewOriginal" class="active" onclick="switchView('original')">ภาพต้นฉบับ + เส้น</button>
@@ -490,7 +569,9 @@
     <div class="canvas-placeholder" id="placeholder">
       ยังไม่มีภาพ<br>กดถ่ายภาพหรืออัปโหลดเพื่อเริ่มต้น
     </div>
-    <canvas id="canvas"></canvas>
+    <div id="zoomLayer">
+      <canvas id="canvas"></canvas>
+    </div>
     <div class="meas-hint" id="measHint">คลิกที่ขอบบนสุดของกองเหล็ก</div>
   </div>
 
@@ -501,6 +582,20 @@
   <div id="resultBox">
     <div class="label">จำนวนแผ่นเหล็กที่ตรวจพบ</div>
     <div class="count" id="sheetCount">–</div>
+  </div>
+
+  <!-- Manual count panel -->
+  <div class="manual-panel" id="manualPanel">
+    <div style="font-size:0.85rem;font-weight:600;color:#333">
+      นับเพิ่มด้วยมือ
+      <span style="font-size:0.75rem;font-weight:400;color:#888"> — จิ้มที่แต่ละแผ่นบนภาพ</span>
+    </div>
+    <div class="sub-toolbar" style="margin:0">
+      <button class="btn-sm orange" id="btnManualToggle" onclick="toggleManualMode()">เริ่มนับด้วยมือ</button>
+      <button class="btn-sm red"    id="btnManualUndo"   onclick="undoManualDot()" disabled>ย้อน 1</button>
+      <button class="btn-sm gray"   id="btnManualClear"  onclick="clearManualDots()">ล้างจุด</button>
+    </div>
+    <div class="manual-tally" id="manualTally">จิ้มที่แผ่นเหล็กแต่ละแผ่นเพื่อนับเพิ่ม</div>
   </div>
 
   <!-- OpenCV badge -->
@@ -533,14 +628,32 @@
     /* ============================================================
        State
     ============================================================ */
-    let currentImageData = null;   // ImageData of the loaded image (for CV)
-    let currentObjectURL = null;   // Object URL for canvas drawing
+    let currentImageData = null;
+    let currentObjectURL = null;
+
+    // ROI
+    let roi = null;            // {x,y,w,h} in canvas px, or null
+    let roiDragStart = null;
+    let roiDragCurrent = null;
+    let roiSelectActive = false;
+    // Manual count
+    let manualDots = [];       // [{cx,cy,n}]
+    let autoCountResult = 0;
+    let manualModeActive = false;
+    // Zoom
+    let zoomScale = 1;
+    let pinchStartDist = null;
+    let pinchStartScale = 1;
+    let doubleTapTimer = null;
+    // Debounce
+    let processTimer = null;
 
     /* ============================================================
        DOM refs
     ============================================================ */
     const canvas        = document.getElementById('canvas');
     const ctx           = canvas.getContext('2d');
+    const zoomLayer     = document.getElementById('zoomLayer');
     const placeholder   = document.getElementById('placeholder');
     const btnCamera     = document.getElementById('btnCamera');
     const btnUpload     = document.getElementById('btnUpload');
@@ -551,6 +664,14 @@
     const statusBar     = document.getElementById('statusBar');
     const resultBox     = document.getElementById('resultBox');
     const sheetCount    = document.getElementById('sheetCount');
+    const canvasWrapper = document.getElementById('canvasWrapper');
+    const btnZoneSelect = document.getElementById('btnZoneSelect');
+    const btnZoneClear  = document.getElementById('btnZoneClear');
+    const zoneInfo      = document.getElementById('zoneInfo');
+    const manualPanel   = document.getElementById('manualPanel');
+    const btnManualToggle = document.getElementById('btnManualToggle');
+    const btnManualUndo   = document.getElementById('btnManualUndo');
+    const manualTally     = document.getElementById('manualTally');
 
     /* ============================================================
        Helpers
@@ -558,6 +679,117 @@
     function setStatus(msg, type = 'info') {
       statusBar.textContent = msg;
       statusBar.className = type;
+    }
+
+    // Convert client (screen) coords → canvas internal pixel coords
+    // Works correctly regardless of CSS zoom/transform on parents
+    function cssToCanvas(clientX, clientY) {
+      const r = canvas.getBoundingClientRect();
+      return {
+        x: Math.round((clientX - r.left) * canvas.width  / r.width),
+        y: Math.round((clientY - r.top)  * canvas.height / r.height)
+      };
+    }
+
+    function normalizeRect(p1, p2) {
+      return {
+        x: Math.min(p1.x, p2.x),
+        y: Math.min(p1.y, p2.y),
+        w: Math.abs(p2.x - p1.x),
+        h: Math.abs(p2.y - p1.y)
+      };
+    }
+
+    // Debounced auto-process (only in CV mode)
+    function debouncedProcess() {
+      clearTimeout(processTimer);
+      processTimer = setTimeout(() => {
+        if (currentImageData && activeMode === 'cv') processImage();
+      }, 700);
+    }
+
+    // ---- Draw base image (CV result or original) ----
+    function drawBaseImage() {
+      if (activeMode === 'cv' && currentView === 'edge' && lastEdgeMat) {
+        cv.imshow(canvas, lastEdgeMat);
+      } else if (activeMode === 'cv' && lastResultMat) {
+        cv.imshow(canvas, lastResultMat);
+      } else if (currentImageData) {
+        ctx.putImageData(currentImageData, 0, 0);
+      }
+    }
+
+    // ---- Redraw all overlays on top of base image ----
+    function redrawOverlays() {
+      drawBaseImage();
+
+      // ROI rectangle (live drag or confirmed)
+      const rr = (roiDragStart && roiDragCurrent)
+        ? normalizeRect(roiDragStart, roiDragCurrent)
+        : roi;
+      if (rr) {
+        ctx.save();
+        ctx.strokeStyle = '#22d3ee';
+        ctx.lineWidth = Math.max(2, canvas.width / 500);
+        ctx.setLineDash([10, 5]);
+        ctx.strokeRect(rr.x, rr.y, rr.w, rr.h);
+        ctx.fillStyle = 'rgba(34,211,238,0.07)';
+        ctx.fillRect(rr.x, rr.y, rr.w, rr.h);
+        ctx.restore();
+      }
+
+      // Thickness measurement lines (if in thickness mode)
+      if (activeMode === 'thickness' && measurePts.length > 0) {
+        const colors = ['#facc15', '#f97316'];
+        const labels = ['TOP', 'BOT'];
+        measurePts.forEach((py, i) => {
+          ctx.save();
+          ctx.strokeStyle = colors[i];
+          ctx.lineWidth = Math.max(2, canvas.width / 300);
+          ctx.setLineDash([12, 6]);
+          ctx.beginPath(); ctx.moveTo(0, py); ctx.lineTo(canvas.width, py); ctx.stroke();
+          ctx.setLineDash([]);
+          const fh = Math.max(16, canvas.width / 40);
+          ctx.fillStyle = colors[i];
+          ctx.font = `bold ${Math.max(12, fh * 0.7)}px sans-serif`;
+          ctx.fillRect(4, py - fh, 52, fh);
+          ctx.fillStyle = '#000';
+          ctx.fillText(labels[i], 8, py - 3);
+          ctx.restore();
+        });
+        if (measurePts.length === 2) {
+          const [y1, y2] = [Math.min(...measurePts), Math.max(...measurePts)];
+          const cx = canvas.width - 30;
+          ctx.save();
+          ctx.strokeStyle = '#22d3ee';
+          ctx.lineWidth = Math.max(2, canvas.width / 400);
+          ctx.beginPath();
+          ctx.moveTo(cx, y1); ctx.lineTo(cx, y2);
+          ctx.moveTo(cx-8, y1); ctx.lineTo(cx+8, y1);
+          ctx.moveTo(cx-8, y2); ctx.lineTo(cx+8, y2);
+          ctx.stroke();
+          ctx.restore();
+        }
+      }
+
+      // Manual count dots
+      manualDots.forEach(d => {
+        const r = Math.max(16, canvas.width / 55);
+        ctx.save();
+        ctx.fillStyle = '#f97316';
+        ctx.beginPath();
+        ctx.arc(d.cx, d.cy, r, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.strokeStyle = '#fff';
+        ctx.lineWidth = 2;
+        ctx.stroke();
+        ctx.fillStyle = '#fff';
+        ctx.font = `bold ${Math.round(r * 1.1)}px sans-serif`;
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(String(d.n), d.cx, d.cy);
+        ctx.restore();
+      });
     }
 
     function drawImageToCanvas(file) {
@@ -569,23 +801,22 @@
         canvas.width  = img.naturalWidth;
         canvas.height = img.naturalHeight;
         ctx.drawImage(img, 0, 0);
-
-        // Capture raw pixel data for OpenCV
         currentImageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
 
         placeholder.style.display = 'none';
         canvas.style.display = 'block';
-
         btnProcess.disabled = false;
         btnReset.disabled   = false;
-
+        btnZoneSelect.disabled = false;
         resultBox.style.display = 'none';
         sheetCount.textContent  = '–';
-
+        manualPanel.classList.remove('visible');
+        manualDots = [];
+        autoCountResult = 0;
         measurePts = [];
         measInfo.textContent = '';
         if (activeMode === 'thickness') showMeasHint(0);
-        setStatus(`โหลดภาพสำเร็จ: ${canvas.width} x ${canvas.height} px`, 'ok');
+        setStatus(`โหลดภาพสำเร็จ: ${canvas.width} × ${canvas.height} px`, 'ok');
       };
       img.onerror = () => setStatus('ไม่สามารถโหลดไฟล์ภาพได้', 'error');
       img.src = currentObjectURL;
@@ -599,8 +830,14 @@
       placeholder.style.display = '';
       btnProcess.disabled = true;
       btnReset.disabled   = true;
+      btnZoneSelect.disabled = true;
       resultBox.style.display = 'none';
       sheetCount.textContent  = '–';
+      manualPanel.classList.remove('visible');
+      manualDots = []; autoCountResult = 0;
+      clearRoi();
+      if (manualModeActive) toggleManualMode();
+      resetZoom();
       fileCamera.value = '';
       fileUpload.value = '';
       setStatus('รีเซ็ตแล้ว รอภาพใหม่...', 'info');
@@ -622,7 +859,6 @@
 
     btnReset.addEventListener('click', () => {
       resetAll();
-      measurePts = [];
       measInfo.textContent = '';
       hideMeasHint();
       if (lastEdgeMat)   { try { lastEdgeMat.delete();   } catch(_){} lastEdgeMat   = null; }
@@ -630,12 +866,161 @@
     });
 
     btnProcess.addEventListener('click', () => {
-      if (!currentImageData) {
-        setStatus('กรุณาโหลดภาพก่อน', 'error');
-        return;
-      }
+      if (!currentImageData) { setStatus('กรุณาโหลดภาพก่อน', 'error'); return; }
       processImage();
     });
+
+    // Auto-reprocess when any slider in param panel changes
+    document.getElementById('paramPanel').addEventListener('input', debouncedProcess);
+
+    /* ============================================================
+       Zoom — pinch (touch) + wheel (desktop)
+    ============================================================ */
+    function applyZoom() {
+      zoomLayer.style.transform = zoomScale === 1 ? '' : `scale(${zoomScale})`;
+    }
+    function resetZoom() { zoomScale = 1; applyZoom(); }
+
+    function getPinchDist(touches) {
+      const dx = touches[0].clientX - touches[1].clientX;
+      const dy = touches[0].clientY - touches[1].clientY;
+      return Math.sqrt(dx * dx + dy * dy);
+    }
+
+    canvasWrapper.addEventListener('touchstart', (e) => {
+      if (e.touches.length === 2) {
+        pinchStartDist  = getPinchDist(e.touches);
+        pinchStartScale = zoomScale;
+        e.preventDefault();
+      }
+    }, { passive: false });
+
+    canvasWrapper.addEventListener('touchmove', (e) => {
+      if (e.touches.length === 2 && pinchStartDist) {
+        const dist = getPinchDist(e.touches);
+        zoomScale = Math.max(1, Math.min(6, pinchStartScale * dist / pinchStartDist));
+        applyZoom();
+        e.preventDefault();
+      }
+    }, { passive: false });
+
+    canvasWrapper.addEventListener('touchend', (e) => {
+      if (e.touches.length < 2) pinchStartDist = null;
+      // Double-tap to reset zoom
+      if (e.changedTouches.length === 1 && zoomScale > 1) {
+        if (doubleTapTimer) {
+          clearTimeout(doubleTapTimer); doubleTapTimer = null; resetZoom();
+        } else {
+          doubleTapTimer = setTimeout(() => { doubleTapTimer = null; }, 300);
+        }
+      }
+    });
+
+    canvasWrapper.addEventListener('wheel', (e) => {
+      e.preventDefault();
+      zoomScale = Math.max(1, Math.min(6, zoomScale * (e.deltaY > 0 ? 0.88 : 1.14)));
+      applyZoom();
+    }, { passive: false });
+
+    /* ============================================================
+       Canvas pointer events — ROI selection + Manual count
+    ============================================================ */
+    canvas.addEventListener('pointerdown', (e) => {
+      if (!currentImageData) return;
+      e.preventDefault();
+      const pt = cssToCanvas(e.clientX, e.clientY);
+
+      if (roiSelectActive) {
+        roiDragStart = pt;
+        roiDragCurrent = pt;
+        canvas.setPointerCapture(e.pointerId);
+        return;
+      }
+
+      if (manualModeActive) {
+        const n = autoCountResult + manualDots.length + 1;
+        manualDots.push({ cx: pt.x, cy: pt.y, n });
+        updateManualDisplay();
+        redrawOverlays();
+        return;
+      }
+    });
+
+    canvas.addEventListener('pointermove', (e) => {
+      if (!roiSelectActive || !roiDragStart) return;
+      roiDragCurrent = cssToCanvas(e.clientX, e.clientY);
+      redrawOverlays();
+    });
+
+    canvas.addEventListener('pointerup', (e) => {
+      if (!roiSelectActive || !roiDragStart) return;
+      const end = cssToCanvas(e.clientX, e.clientY);
+      const r   = normalizeRect(roiDragStart, end);
+      roiDragStart = null; roiDragCurrent = null;
+      setRoiSelectMode(false);
+      if (r.w > 15 && r.h > 15) {
+        roi = r;
+        btnZoneClear.style.display = '';
+        zoneInfo.textContent = `โซน ${r.w}×${r.h}px`;
+        debouncedProcess();
+      }
+      redrawOverlays();
+    });
+
+    /* ============================================================
+       ROI functions
+    ============================================================ */
+    function toggleRoiSelect() { setRoiSelectMode(!roiSelectActive); }
+
+    function setRoiSelectMode(active) {
+      roiSelectActive = active;
+      btnZoneSelect.classList.toggle('active', active);
+      document.body.classList.toggle('roi-select-mode', active);
+      if (!active) { roiDragStart = null; roiDragCurrent = null; }
+    }
+
+    function clearRoi() {
+      roi = null; roiDragStart = null; roiDragCurrent = null;
+      btnZoneClear.style.display = 'none';
+      zoneInfo.textContent = '';
+      if (currentImageData) { redrawOverlays(); debouncedProcess(); }
+    }
+
+    /* ============================================================
+       Manual count functions
+    ============================================================ */
+    function toggleManualMode() {
+      manualModeActive = !manualModeActive;
+      btnManualToggle.classList.toggle('active', manualModeActive);
+      btnManualToggle.textContent = manualModeActive ? 'หยุดนับด้วยมือ' : 'เริ่มนับด้วยมือ';
+      document.body.classList.toggle('manual-count-mode', manualModeActive);
+    }
+
+    function undoManualDot() {
+      if (!manualDots.length) return;
+      manualDots.pop();
+      updateManualDisplay();
+      redrawOverlays();
+    }
+
+    function clearManualDots() {
+      manualDots = [];
+      updateManualDisplay();
+      redrawOverlays();
+    }
+
+    function updateManualDisplay() {
+      const total = autoCountResult + manualDots.length;
+      sheetCount.textContent = total;
+      btnManualUndo.disabled = manualDots.length === 0;
+      if (manualDots.length === 0) {
+        manualTally.textContent = 'จิ้มที่แผ่นเหล็กแต่ละแผ่นเพื่อนับเพิ่ม';
+      } else {
+        manualTally.innerHTML =
+          `AUTO <strong>${autoCountResult}</strong> + มือ <strong>${manualDots.length}</strong>` +
+          ` = รวม <strong>${total}</strong> แผ่น`;
+      }
+    }
 
     /* ============================================================
        Mode switching — CV vs Thickness
@@ -650,28 +1035,25 @@
       document.getElementById('paramPanel').style.display = mode === 'cv' ? '' : 'none';
       document.getElementById('thicknessPanel').classList.toggle('visible', mode === 'thickness');
       document.querySelector('.view-toggle').style.display = mode === 'cv' ? '' : 'none';
+      document.getElementById('zoneToolbar').style.display = mode === 'cv' ? '' : 'none';
       btnProcess.style.display = mode === 'cv' ? '' : 'none';
 
       if (mode === 'thickness') {
         measurePts = [];
-        if (currentImageData) {
-          redrawOriginal();
-          showMeasHint(0);
-        }
+        if (currentImageData) { redrawOriginal(); showMeasHint(0); }
       } else {
         hideMeasHint();
         measurePts = [];
-        if (lastResultMat) cv.imshow(canvas, lastResultMat);
-        else if (currentImageData) redrawOriginal();
+        if (currentImageData) redrawOverlays();
       }
     }
 
     /* ============================================================
        Thickness mode — two-click measurement
     ============================================================ */
-    const measHint   = document.getElementById('measHint');
-    const measInfo   = document.getElementById('measInfo');
-    let measurePts   = [];   // canvas-internal Y coordinates (0, 1, or 2)
+    const measHint = document.getElementById('measHint');
+    const measInfo = document.getElementById('measInfo');
+    let measurePts = [];
 
     function showMeasHint(step) {
       measHint.style.display = 'block';
@@ -679,20 +1061,11 @@
         ? 'คลิกที่ขอบบนสุดของกองเหล็ก'
         : 'คลิกที่ขอบล่างสุดของกองเหล็ก';
     }
-
     function hideMeasHint() { measHint.style.display = 'none'; }
 
     function onThicknessChange() {
       const sel = document.getElementById('thicknessSelect').value;
-      document.getElementById('customThicknessField').style.display =
-        sel === 'custom' ? '' : 'none';
-    }
-
-    // Convert CSS-pixel click position → canvas internal pixel Y
-    function cssToCanvasY(cssY) {
-      const rect  = canvas.getBoundingClientRect();
-      const scaleY = canvas.height / rect.height;
-      return Math.round(cssY * scaleY);
+      document.getElementById('customThicknessField').style.display = sel === 'custom' ? '' : 'none';
     }
 
     function redrawOriginal() {
@@ -700,68 +1073,26 @@
       ctx.putImageData(currentImageData, 0, 0);
     }
 
-    function drawMeasurementOverlay() {
-      redrawOriginal();
-      const colors = ['#facc15', '#f97316'];   // yellow, orange
-      const labels = ['TOP', 'BOT'];
-      measurePts.forEach((py, i) => {
-        ctx.save();
-        ctx.strokeStyle = colors[i];
-        ctx.lineWidth   = Math.max(2, canvas.width / 300);
-        ctx.setLineDash([12, 6]);
-        ctx.beginPath();
-        ctx.moveTo(0, py);
-        ctx.lineTo(canvas.width, py);
-        ctx.stroke();
-        // Label badge
-        ctx.setLineDash([]);
-        ctx.fillStyle = colors[i];
-        ctx.font = `bold ${Math.max(14, canvas.width / 50)}px sans-serif`;
-        ctx.fillRect(4, py - Math.max(16, canvas.width / 40), 52, Math.max(18, canvas.width / 38));
-        ctx.fillStyle = '#000';
-        ctx.fillText(labels[i], 8, py - 3);
-        ctx.restore();
-      });
-
-      // Draw bracket between points if both marked
-      if (measurePts.length === 2) {
-        const [y1, y2] = [Math.min(...measurePts), Math.max(...measurePts)];
-        const cx = canvas.width - 30;
-        ctx.save();
-        ctx.strokeStyle = '#22d3ee';
-        ctx.lineWidth   = Math.max(2, canvas.width / 400);
-        ctx.beginPath();
-        ctx.moveTo(cx, y1); ctx.lineTo(cx, y2);
-        ctx.moveTo(cx - 8, y1); ctx.lineTo(cx + 8, y1);
-        ctx.moveTo(cx - 8, y2); ctx.lineTo(cx + 8, y2);
-        ctx.stroke();
-        ctx.restore();
-      }
-    }
-
-    canvas.addEventListener('click', (e) => {
+    // Thickness mode clicks handled via pointerdown (only when not roiSelect/manual)
+    canvas.addEventListener('pointerdown', (e) => {
       if (activeMode !== 'thickness' || !currentImageData) return;
-      const rect = canvas.getBoundingClientRect();
-      const canvasY = cssToCanvasY(e.clientY - rect.top);
+      if (roiSelectActive || manualModeActive) return;
+      e.preventDefault();
+      const pt = cssToCanvas(e.clientX, e.clientY);
 
-      if (measurePts.length >= 2) {
-        // Reset and start over
-        measurePts = [];
-        measInfo.textContent = '';
-      }
-
-      measurePts.push(canvasY);
-      drawMeasurementOverlay();
+      if (measurePts.length >= 2) { measurePts = []; measInfo.textContent = ''; }
+      measurePts.push(pt.y);
+      redrawOverlays();
 
       if (measurePts.length === 1) {
         showMeasHint(1);
-        measInfo.textContent = `TOP: y = ${canvasY}px`;
+        measInfo.textContent = `TOP: y = ${pt.y}px`;
       } else {
         hideMeasHint();
         const heightPx = Math.abs(measurePts[1] - measurePts[0]);
         measInfo.innerHTML =
           `TOP: ${measurePts[0]}px &nbsp;|&nbsp; BOT: ${measurePts[1]}px &nbsp;|&nbsp; ` +
-          `<strong>ความสูงกอง: ${heightPx}px</strong> &nbsp;— กรอกความสูงจริง (mm) แล้วกด คำนวณ`;
+          `<strong>ความสูงกอง: ${heightPx}px</strong> — กรอกความสูงจริง (mm) แล้วกด คำนวณ`;
       }
     });
 
@@ -780,6 +1111,8 @@
 
       const raw   = stackMm / thickness;
       const count = Math.round(raw);
+      autoCountResult = count;
+      manualDots = [];
       displayResult(count);
       setStatus(
         `${stackMm} mm ÷ ${thickness} mm/แผ่น = ${raw.toFixed(2)} ≈ ${count} แผ่น`,
@@ -804,73 +1137,71 @@
     }
 
     /* ============================================================
-       Image Processing — Canny + HoughLinesP
+       Image Processing — Canny + HoughLinesP (with ROI support)
     ============================================================ */
     function processImage() {
       if (typeof cv === 'undefined') {
-        setStatus('OpenCV ยังไม่พร้อม กรุณารอสักครู่...', 'error');
-        return;
+        setStatus('OpenCV ยังไม่พร้อม กรุณารอสักครู่...', 'error'); return;
       }
       if (!currentImageData) {
-        setStatus('กรุณาโหลดภาพก่อน', 'error');
-        return;
+        setStatus('กรุณาโหลดภาพก่อน', 'error'); return;
       }
 
       setStatus('กำลังประมวลผล...', 'info');
       btnProcess.disabled = true;
 
-      // Defer to allow the browser to repaint status first
       setTimeout(() => {
-        let src, gray, blurred, edges, edgeRGBA, lines, resultMat;
+        let fullSrc, procSrc, gray, blurred, edges, lines, resultMat, edgeFull;
         try {
-          // Read params
-          let   ksize     = parseInt(document.getElementById('paramBlur').value);
+          let ksize     = parseInt(document.getElementById('paramBlur').value);
           const cannyLow  = parseInt(document.getElementById('paramCannyLow').value);
           const cannyHigh = parseInt(document.getElementById('paramCannyHigh').value);
           const minLenPct = parseInt(document.getElementById('paramMinLen').value) / 100;
           const tolerance = parseInt(document.getElementById('paramTolerance').value);
           const maxGap    = parseInt(document.getElementById('paramGap').value);
-          if (ksize % 2 === 0) ksize += 1; // must be odd
+          if (ksize % 2 === 0) ksize++;
 
-          // ── Step 1: imread ──────────────────────────────────────
-          src = cv.imread(canvas);
+          // ── Step 1: Restore original image to canvas, then imread ──
+          ctx.putImageData(currentImageData, 0, 0);
+          fullSrc = cv.imread(canvas);
 
-          // ── Step 2: Grayscale ───────────────────────────────────
-          gray = new cv.Mat();
-          cv.cvtColor(src, gray, cv.COLOR_RGBA2GRAY);
-
-          // ── Step 3: Gaussian Blur ───────────────────────────────
-          blurred = new cv.Mat();
-          cv.GaussianBlur(gray, blurred, new cv.Size(ksize, ksize), 0);
-
-          // ── Step 4: Canny edge detection ────────────────────────
-          edges = new cv.Mat();
-          cv.Canny(blurred, edges, cannyLow, cannyHigh);
-
-          // Convert edges (grayscale) → RGBA for display / storage
-          edgeRGBA = new cv.Mat();
-          cv.cvtColor(edges, edgeRGBA, cv.COLOR_GRAY2RGBA);
-
-          // ── Step 5: HoughLinesP ─────────────────────────────────
-          lines = new cv.Mat();
-          const minLen = canvas.width * minLenPct;
-          cv.HoughLinesP(edges, lines, 1, Math.PI / 180, 40, minLen, maxGap);
-
-          // ── Step 6: Filter horizontal lines ─────────────────────
-          const horiz = [];
-          for (let i = 0; i < lines.rows; i++) {
-            const x1 = lines.data32S[i * 4];
-            const y1 = lines.data32S[i * 4 + 1];
-            const x2 = lines.data32S[i * 4 + 2];
-            const y2 = lines.data32S[i * 4 + 3];
-            const angleDeg = Math.abs(Math.atan2(y2 - y1, x2 - x1) * 180 / Math.PI);
-            // Keep lines within ±15° of horizontal
-            if (angleDeg < 15 || angleDeg > 165) {
-              horiz.push({ x1, y1, x2, y2, midY: (y1 + y2) / 2 });
+          // ── Step 2: Crop to ROI if set ─────────────────────────────
+          let ox = 0, oy = 0;   // ROI offset in full-image coords
+          if (roi && roi.w > 20 && roi.h > 20) {
+            const rx = Math.max(0, Math.min(roi.x, fullSrc.cols - 2));
+            const ry = Math.max(0, Math.min(roi.y, fullSrc.rows - 2));
+            const rw = Math.min(roi.w, fullSrc.cols - rx);
+            const rh = Math.min(roi.h, fullSrc.rows - ry);
+            if (rw > 10 && rh > 10) {
+              procSrc = fullSrc.roi(new cv.Rect(rx, ry, rw, rh)).clone();
+              ox = rx; oy = ry;
             }
           }
+          if (!procSrc) procSrc = fullSrc.clone();
 
-          // ── Step 7: Cluster lines by Y-position ─────────────────
+          // ── Step 3-4: Grayscale → Blur → Canny ────────────────────
+          gray    = new cv.Mat();
+          blurred = new cv.Mat();
+          edges   = new cv.Mat();
+          cv.cvtColor(procSrc, gray, cv.COLOR_RGBA2GRAY);
+          cv.GaussianBlur(gray, blurred, new cv.Size(ksize, ksize), 0);
+          cv.Canny(blurred, edges, cannyLow, cannyHigh);
+
+          // ── Step 5: HoughLinesP ────────────────────────────────────
+          lines = new cv.Mat();
+          const refWidth = roi ? Math.min(roi.w, procSrc.cols) : canvas.width;
+          cv.HoughLinesP(edges, lines, 1, Math.PI / 180, 40, refWidth * minLenPct, maxGap);
+
+          // ── Step 6: Filter + cluster horizontal lines ──────────────
+          const horiz = [];
+          for (let i = 0; i < lines.rows; i++) {
+            const x1 = lines.data32S[i*4]   + ox;
+            const y1 = lines.data32S[i*4+1] + oy;
+            const x2 = lines.data32S[i*4+2] + ox;
+            const y2 = lines.data32S[i*4+3] + oy;
+            const ang = Math.abs(Math.atan2(y2-y1, x2-x1) * 180 / Math.PI);
+            if (ang < 15 || ang > 165) horiz.push({ x1, y1, x2, y2, midY: (y1+y2)/2 });
+          }
           horiz.sort((a, b) => a.midY - b.midY);
           const clusters = [];
           for (const ln of horiz) {
@@ -879,44 +1210,60 @@
               clusters.push({ lines: [ln], avgY: ln.midY });
             } else {
               last.lines.push(ln);
-              last.avgY = last.lines.reduce((s, l) => s + l.midY, 0) / last.lines.length;
+              last.avgY = last.lines.reduce((s,l) => s + l.midY, 0) / last.lines.length;
             }
           }
 
-          // ── Step 8: Draw overlay on original ────────────────────
-          resultMat = src.clone();
-          const colorLine = new cv.Scalar(255, 50, 50, 255);   // red
-          const colorDot  = new cv.Scalar(255, 200, 0, 255);   // yellow
+          // ── Step 7: Build result overlay image ─────────────────────
+          resultMat = fullSrc.clone();
+          // Draw ROI border on result
+          if (roi && roi.w > 20) {
+            cv.rectangle(resultMat,
+              new cv.Point(ox, oy),
+              new cv.Point(ox + procSrc.cols, oy + procSrc.rows),
+              new cv.Scalar(34, 211, 238, 255), 3);
+          }
+          const cLine = new cv.Scalar(255, 50, 50, 255);
+          const cDot  = new cv.Scalar(255, 200, 0, 255);
           clusters.forEach((cl, idx) => {
             cl.lines.forEach(ln => {
-              cv.line(resultMat,
-                new cv.Point(ln.x1, ln.y1),
-                new cv.Point(ln.x2, ln.y2),
-                colorLine, 3);
+              cv.line(resultMat, new cv.Point(ln.x1, ln.y1), new cv.Point(ln.x2, ln.y2), cLine, 3);
             });
-            // Label cluster index at left edge
-            const labelY = Math.round(cl.avgY);
-            cv.circle(resultMat, new cv.Point(18, labelY), 12, colorDot, -1);
-            cv.putText(resultMat, String(idx + 1),
-              new cv.Point(idx + 1 < 10 ? 12 : 8, labelY + 5),
-              cv.FONT_HERSHEY_SIMPLEX, 0.5, new cv.Scalar(0, 0, 0, 255), 2);
+            const lx = ox + 18, ly = Math.round(cl.avgY);
+            cv.circle(resultMat, new cv.Point(lx, ly), 13, cDot, -1);
+            cv.putText(resultMat, String(idx+1),
+              new cv.Point(lx - (idx+1 < 10 ? 4 : 8), ly + 5),
+              cv.FONT_HERSHEY_SIMPLEX, 0.52, new cv.Scalar(0,0,0,255), 2);
           });
 
-          // Save for view-toggle
-          if (lastEdgeMat)   { lastEdgeMat.delete();   }
-          if (lastResultMat) { lastResultMat.delete();  }
-          lastEdgeMat   = edgeRGBA.clone();
+          // ── Step 8: Build edge display image ───────────────────────
+          // Show edges in the processed region, original elsewhere
+          edgeFull = fullSrc.clone();
+          const edgeRGBA = new cv.Mat();
+          cv.cvtColor(edges, edgeRGBA, cv.COLOR_GRAY2RGBA);
+          // Paste edge image into the ROI region of edgeFull
+          const edgeDst = edgeFull.roi(new cv.Rect(ox, oy, procSrc.cols, procSrc.rows));
+          edgeRGBA.copyTo(edgeDst);
+          edgeRGBA.delete();
+
+          // ── Step 9: Store & display ────────────────────────────────
+          if (lastEdgeMat)   lastEdgeMat.delete();
+          if (lastResultMat) lastResultMat.delete();
+          lastEdgeMat   = edgeFull.clone();
           lastResultMat = resultMat.clone();
-          edgeRGBA = null; // don't delete in finally — stored above
+          edgeFull = null;   // don't delete in finally
 
-          // Show current view
           cv.imshow(canvas, currentView === 'edge' ? lastEdgeMat : lastResultMat);
+          redrawOverlays();  // draw ROI rect + manual dots on top
 
-          // ── Step 9: Result ───────────────────────────────────────
-          const sheetCount = clusters.length;
-          displayResult(sheetCount);
+          // ── Step 10: Result ────────────────────────────────────────
+          autoCountResult = clusters.length;
+          manualDots = [];   // reset manual dots when auto reruns
+          displayResult(autoCountResult);
           setStatus(
-            `ตรวจพบ ${sheetCount} กลุ่มเส้นขอบ จากเส้นแนวนอน ${horiz.length} เส้น (ทั้งหมด ${lines.rows} เส้น)`,
+            `ตรวจพบ ${autoCountResult} กลุ่มเส้นขอบ` +
+            (roi ? ` (ในโซน ROI)` : '') +
+            ` จาก ${horiz.length} เส้นแนวนอน`,
             'ok'
           );
 
@@ -924,7 +1271,7 @@
           setStatus('เกิดข้อผิดพลาด: ' + err.message, 'error');
           console.error(err);
         } finally {
-          [src, gray, blurred, edges, edgeRGBA, lines, resultMat]
+          [fullSrc, procSrc, gray, blurred, edges, lines, resultMat, edgeFull]
             .forEach(m => { try { if (m && !m.isDeleted()) m.delete(); } catch(_){} });
           btnProcess.disabled = false;
         }
@@ -934,6 +1281,8 @@
     function displayResult(count) {
       sheetCount.textContent  = count;
       resultBox.style.display = 'block';
+      manualPanel.classList.add('visible');
+      updateManualDisplay();
     }
 
   </script>
