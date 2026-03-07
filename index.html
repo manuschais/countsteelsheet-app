@@ -448,6 +448,52 @@
       padding: 6px 12px; border: 1.5px solid #aaa; border-radius: 6px;
       background: #fff; font-size: 0.78rem; cursor: pointer; color: #666;
     }
+
+    /* ---- Floating overlay toolbar ---- */
+    #floatToolbar {
+      position: absolute;
+      bottom: 10px;
+      left: 50%;
+      transform: translateX(-50%);
+      display: none;
+      align-items: center;
+      gap: 5px;
+      padding: 6px 10px;
+      background: rgba(10, 14, 36, 0.82);
+      border-radius: 32px;
+      backdrop-filter: blur(6px);
+      -webkit-backdrop-filter: blur(6px);
+      z-index: 20;
+      max-width: calc(100% - 16px);
+      flex-wrap: wrap;
+      justify-content: center;
+    }
+    #floatToolbar.visible { display: flex; }
+    .ft-btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      padding: 5px 11px;
+      border: 1.5px solid rgba(255,255,255,0.22);
+      border-radius: 20px;
+      background: rgba(255,255,255,0.10);
+      color: #ddd;
+      font-size: 0.76rem;
+      font-weight: 600;
+      cursor: pointer;
+      white-space: nowrap;
+      transition: background 0.15s;
+      user-select: none;
+    }
+    .ft-btn:active { background: rgba(255,255,255,0.25); }
+    .ft-btn.on-orange { background: #f97316; border-color: #f97316; color: #fff; }
+    .ft-btn.on-teal   { background: #0891b2; border-color: #0891b2; color: #fff; }
+    .ft-btn.on-purple { background: #7c3aed; border-color: #7c3aed; color: #fff; }
+    .ft-btn:disabled  { opacity: 0.3; cursor: not-allowed; }
+    .ft-sep { width: 1px; height: 22px; background: rgba(255,255,255,0.18); flex-shrink: 0; }
+    .ft-group { display: flex; align-items: center; gap: 4px; }
+    .ft-lbl  { font-size: 0.64rem; color: rgba(255,255,255,0.5); white-space: nowrap; }
+    .ft-slider { width: 62px; accent-color: #f97316; cursor: pointer; }
   </style>
 </head>
 <body>
@@ -617,6 +663,32 @@
       <canvas id="canvas"></canvas>
     </div>
     <div class="meas-hint" id="measHint">คลิกที่ขอบบนสุดของกองเหล็ก</div>
+
+    <!-- Floating counting toolbar -->
+    <div id="floatToolbar">
+      <div class="ft-group">
+        <button class="ft-btn" id="fBtnManual" onclick="toggleManualMode()">✏️ นับมือ</button>
+        <button class="ft-btn" id="fBtnUndo"   onclick="undoManualDot()" disabled>↩</button>
+        <button class="ft-btn" id="fBtnClearDots" onclick="clearManualDots()">🗑</button>
+      </div>
+      <div class="ft-sep"></div>
+      <div class="ft-group">
+        <button class="ft-btn" id="fBtnLines" onclick="toggleCVLines()">เส้น</button>
+        <button class="ft-btn" id="fBtnColor" onclick="toggleFalseColor()">ย้อมสี</button>
+      </div>
+      <div class="ft-sep"></div>
+      <div class="ft-group">
+        <span class="ft-lbl">AUTO</span>
+        <input class="ft-slider" type="range" id="fBadgeSize" min="0.5" max="3.0" step="0.1" value="1.0"
+               oninput="badgeSizeMultiplier=parseFloat(this.value); redrawOverlays()">
+        <span class="ft-lbl">มือ</span>
+        <input class="ft-slider" type="range" id="fDotSize" min="0.4" max="3.0" step="0.1" value="1.0"
+               oninput="dotSizeMultiplier=parseFloat(this.value);
+                        document.getElementById('valDotSize').textContent=parseFloat(this.value).toFixed(1);
+                        document.getElementById('paramDotSize').value=this.value;
+                        redrawOverlays()">
+      </div>
+    </div>
   </div>
 
   <!-- Status bar -->
@@ -689,7 +761,11 @@
     let manualDots = [];
     let autoCountResult = 0;
     let manualModeActive = false;
-    let dotSizeMultiplier = 1.0;
+    let dotSizeMultiplier  = 1.0;
+    let badgeSizeMultiplier = 1.0;
+    // CV display options
+    let showCVLines    = false;   // hide lines by default — badges only
+    let falseColorActive = false;
     // Detected clusters (from CV)
     let detectedClusters = [];   // [{avgY, lines, ox, removed}]
     // Zoom + pan
@@ -803,15 +879,48 @@
       debouncedProcess();
     }
 
+    // ---- Pixel post-processing after drawing base ----
+    function applyBrightnessContrast() {
+      if (brightnessAdj === 0 && contrastAdj === 0) return;
+      const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+      const d = imgData.data;
+      const contrast = 1 + contrastAdj / 100;
+      for (let i = 0; i < d.length; i += 4) {
+        for (let c = 0; c < 3; c++) {
+          let v = (d[i+c] - 128) * contrast + 128 + brightnessAdj;
+          d[i+c] = Math.max(0, Math.min(255, Math.round(v)));
+        }
+      }
+      ctx.putImageData(imgData, 0, 0);
+    }
+
+    function applyFalseColor() {
+      const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+      const d = imgData.data;
+      for (let i = 0; i < d.length; i += 4) {
+        const g = (0.299 * d[i] + 0.587 * d[i+1] + 0.114 * d[i+2]) / 255;
+        let r, gr, b;
+        if      (g < 0.25) { r = 0;              gr = g * 4 * 255;       b = 255; }
+        else if (g < 0.5)  { r = 0;              gr = 255;               b = (0.5-g)*4*255; }
+        else if (g < 0.75) { r = (g-0.5)*4*255;  gr = 255;               b = 0; }
+        else               { r = 255;             gr = (1-g)*4*255;       b = 0; }
+        d[i] = Math.round(r); d[i+1] = Math.round(gr); d[i+2] = Math.round(b);
+      }
+      ctx.putImageData(imgData, 0, 0);
+    }
+
     // ---- Draw base image (CV result or adjusted original) ----
     function drawBaseImage() {
       if (activeMode === 'cv' && currentView === 'edge' && lastEdgeMat) {
         cv.imshow(canvas, lastEdgeMat);
+        applyBrightnessContrast();
       } else if (activeMode === 'cv' && lastResultMat) {
         cv.imshow(canvas, lastResultMat);
+        applyBrightnessContrast();
       } else if (currentImageData) {
         ctx.putImageData(getAdjustedImageData(), 0, 0);
       }
+      if (falseColorActive) applyFalseColor();
     }
 
     // ---- Redraw all overlays on top of base image ----
@@ -836,18 +945,20 @@
       // CV detected lines + cluster badges (drawn via ctx for interactivity)
       if (activeMode === 'cv' && detectedClusters.length > 0) {
         const lw = Math.max(2, canvas.width / 500);
-        const br = Math.max(14, canvas.width / 65);   // badge radius
+        const br = Math.max(14, canvas.width / 65) * badgeSizeMultiplier;
         let visIdx = 0;
         detectedClusters.forEach(cl => {
           const lx = cl.ox + br + 4, ly = Math.round(cl.avgY);
           if (cl.removed) {
             ctx.save();
-            ctx.globalAlpha = 0.18;
-            ctx.strokeStyle = '#aaa'; ctx.lineWidth = lw;
-            cl.lines.forEach(ln => {
-              ctx.beginPath(); ctx.moveTo(ln.x1, ln.y1); ctx.lineTo(ln.x2, ln.y2); ctx.stroke();
-            });
-            ctx.globalAlpha = 1;
+            if (showCVLines) {
+              ctx.globalAlpha = 0.18;
+              ctx.strokeStyle = '#aaa'; ctx.lineWidth = lw;
+              cl.lines.forEach(ln => {
+                ctx.beginPath(); ctx.moveTo(ln.x1, ln.y1); ctx.lineTo(ln.x2, ln.y2); ctx.stroke();
+              });
+              ctx.globalAlpha = 1;
+            }
             ctx.fillStyle = 'rgba(150,150,150,0.45)';
             ctx.beginPath(); ctx.arc(lx, ly, br, 0, Math.PI*2); ctx.fill();
             ctx.strokeStyle = '#e94560'; ctx.lineWidth = Math.max(2, br * 0.18);
@@ -858,10 +969,12 @@
           } else {
             visIdx++;
             ctx.save();
-            ctx.strokeStyle = '#ff3333'; ctx.lineWidth = lw;
-            cl.lines.forEach(ln => {
-              ctx.beginPath(); ctx.moveTo(ln.x1, ln.y1); ctx.lineTo(ln.x2, ln.y2); ctx.stroke();
-            });
+            if (showCVLines) {
+              ctx.strokeStyle = '#ff3333'; ctx.lineWidth = lw;
+              cl.lines.forEach(ln => {
+                ctx.beginPath(); ctx.moveTo(ln.x1, ln.y1); ctx.lineTo(ln.x2, ln.y2); ctx.stroke();
+              });
+            }
             ctx.fillStyle = '#ffc800';
             ctx.beginPath(); ctx.arc(lx, ly, br, 0, Math.PI*2); ctx.fill();
             ctx.fillStyle = '#000';
@@ -946,6 +1059,7 @@
         detectedClusters = [];
         measurePts = [];
         document.getElementById('imgAdjPanel').classList.add('visible');
+        document.getElementById('floatToolbar').classList.add('visible');
         measInfo.textContent = '';
         if (activeMode === 'thickness') showMeasHint(0);
         setStatus(`โหลดภาพสำเร็จ: ${canvas.width} × ${canvas.height} px`, 'ok');
@@ -968,6 +1082,7 @@
       manualPanel.classList.remove('visible');
       manualDots = []; autoCountResult = 0; detectedClusters = [];
       document.getElementById('imgAdjPanel').classList.remove('visible');
+      document.getElementById('floatToolbar').classList.remove('visible');
       clearRoi();
       if (manualModeActive) toggleManualMode();
       resetZoom();
@@ -1049,11 +1164,17 @@
 
     canvasWrapper.addEventListener('touchmove', (e) => {
       if (e.touches.length === 2 && pinchStartDist) {
-        const dist  = getPinchDist(e.touches);
+        const dist = getPinchDist(e.touches);
+        const wr = canvasWrapper.getBoundingClientRect();
+        // Current pinch center
+        const cx = ((e.touches[0].clientX + e.touches[1].clientX) / 2) - wr.left - wr.width  / 2;
+        const cy = ((e.touches[0].clientY + e.touches[1].clientY) / 2) - wr.top  - wr.height / 2;
+
         const newScale = Math.max(1, Math.min(6, pinchStartScale * dist / pinchStartDist));
         const ratio = newScale / pinchStartScale;
-        panX = pinchCenterX * (1 - ratio) + pinchStartPanX * ratio;
-        panY = pinchCenterY * (1 - ratio) + pinchStartPanY * ratio;
+        // Zoom toward pinch start center + translate by pinch center movement
+        panX = pinchCenterX * (1 - ratio) + pinchStartPanX * ratio + (cx - pinchCenterX);
+        panY = pinchCenterY * (1 - ratio) + pinchStartPanY * ratio + (cy - pinchCenterY);
         zoomScale = newScale;
         clampPan();
         applyZoom();
@@ -1090,10 +1211,21 @@
     /* ============================================================
        Canvas pointer events — ROI selection + Manual count
     ============================================================ */
+    canvas.addEventListener('contextmenu', e => e.preventDefault());
+
     canvas.addEventListener('pointerdown', (e) => {
       if (!currentImageData) return;
       e.preventDefault();
       const pt = cssToCanvas(e.clientX, e.clientY);
+
+      // Right-click always pans (works in any mode)
+      if (e.button === 2) {
+        isPanning = true;
+        panPointerStart = { x: e.clientX - panX, y: e.clientY - panY };
+        canvas.setPointerCapture(e.pointerId);
+        document.body.classList.add('panning');
+        return;
+      }
 
       // ROI drag
       if (roiSelectActive) {
@@ -1193,11 +1325,27 @@
     /* ============================================================
        Manual count functions
     ============================================================ */
+    function toggleCVLines() {
+      showCVLines = !showCVLines;
+      document.getElementById('fBtnLines').classList.toggle('on-teal', showCVLines);
+      redrawOverlays();
+    }
+
+    function toggleFalseColor() {
+      falseColorActive = !falseColorActive;
+      document.getElementById('fBtnColor').classList.toggle('on-purple', falseColorActive);
+      redrawOverlays();
+    }
+
     function toggleManualMode() {
       manualModeActive = !manualModeActive;
       btnManualToggle.classList.toggle('active', manualModeActive);
       btnManualToggle.textContent = manualModeActive ? 'หยุดนับด้วยมือ' : 'เริ่มนับด้วยมือ';
       document.body.classList.toggle('manual-count-mode', manualModeActive);
+      // Sync floating toolbar button
+      const fb = document.getElementById('fBtnManual');
+      fb.classList.toggle('on-orange', manualModeActive);
+      fb.textContent = manualModeActive ? '✏️ หยุด' : '✏️ นับมือ';
       applyZoom();  // refresh can-pan class
     }
 
@@ -1218,6 +1366,7 @@
       const total = autoCountResult + manualDots.length;
       sheetCount.textContent = total;
       btnManualUndo.disabled = manualDots.length === 0;
+      document.getElementById('fBtnUndo').disabled = manualDots.length === 0;
       if (manualDots.length === 0) {
         manualTally.textContent = 'จิ้มที่แผ่นเหล็กแต่ละแผ่นเพื่อนับเพิ่ม';
       } else {
