@@ -1,0 +1,392 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>นับแผ่นเหล็ก</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: 'Segoe UI', sans-serif;
+      background: #f0f2f5;
+      color: #1a1a2e;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 24px 16px;
+    }
+
+    header {
+      text-align: center;
+      margin-bottom: 24px;
+    }
+
+    header h1 {
+      font-size: 1.6rem;
+      font-weight: 700;
+      color: #16213e;
+    }
+
+    header p {
+      font-size: 0.9rem;
+      color: #555;
+      margin-top: 4px;
+    }
+
+    /* ---- Control Panel ---- */
+    .controls {
+      display: flex;
+      gap: 12px;
+      flex-wrap: wrap;
+      justify-content: center;
+      margin-bottom: 20px;
+    }
+
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 10px 20px;
+      border: none;
+      border-radius: 8px;
+      font-size: 0.95rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: opacity 0.2s, transform 0.1s;
+    }
+
+    .btn:active { transform: scale(0.97); }
+    .btn:disabled { opacity: 0.45; cursor: not-allowed; }
+
+    .btn-camera   { background: #0f3460; color: #fff; }
+    .btn-upload   { background: #e94560; color: #fff; }
+    .btn-process  { background: #16213e; color: #fff; }
+    .btn-reset    { background: #ddd;    color: #333; }
+
+    /* hidden file inputs */
+    #fileCamera, #fileUpload { display: none; }
+
+    /* ---- Canvas area ---- */
+    .canvas-wrapper {
+      position: relative;
+      width: 100%;
+      max-width: 720px;
+      background: #fff;
+      border-radius: 12px;
+      box-shadow: 0 4px 20px rgba(0,0,0,0.10);
+      overflow: hidden;
+      aspect-ratio: 4/3;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .canvas-placeholder {
+      color: #aaa;
+      font-size: 0.95rem;
+      text-align: center;
+      pointer-events: none;
+      user-select: none;
+    }
+
+    #canvas {
+      display: none;
+      max-width: 100%;
+      max-height: 100%;
+      object-fit: contain;
+    }
+
+    /* ---- Status bar ---- */
+    #statusBar {
+      width: 100%;
+      max-width: 720px;
+      margin-top: 12px;
+      padding: 10px 16px;
+      background: #fff;
+      border-radius: 8px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.07);
+      font-size: 0.88rem;
+      color: #444;
+      min-height: 40px;
+    }
+
+    #statusBar.error  { border-left: 4px solid #e94560; }
+    #statusBar.info   { border-left: 4px solid #0f3460; }
+    #statusBar.ok     { border-left: 4px solid #28a745; }
+
+    /* ---- Result box ---- */
+    #resultBox {
+      display: none;
+      width: 100%;
+      max-width: 720px;
+      margin-top: 12px;
+      padding: 16px 20px;
+      background: #fff;
+      border-radius: 8px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.07);
+      text-align: center;
+    }
+
+    #resultBox .label { font-size: 0.85rem; color: #666; }
+    #resultBox .count { font-size: 2.8rem; font-weight: 700; color: #0f3460; line-height: 1.2; }
+
+    /* ---- OpenCV loading badge ---- */
+    #opencvStatus {
+      position: fixed;
+      bottom: 16px;
+      right: 16px;
+      padding: 6px 12px;
+      border-radius: 20px;
+      font-size: 0.78rem;
+      font-weight: 600;
+      background: #ddd;
+      color: #555;
+      transition: background 0.4s, color 0.4s;
+    }
+
+    #opencvStatus.ready { background: #d4edda; color: #155724; }
+    #opencvStatus.error { background: #f8d7da; color: #721c24; }
+  </style>
+</head>
+<body>
+
+  <header>
+    <h1>ระบบนับแผ่นเหล็ก</h1>
+    <p>ถ่ายหรืออัปโหลดภาพเพื่อตรวจนับจำนวนแผ่น</p>
+  </header>
+
+  <!-- Hidden file inputs -->
+  <input type="file" id="fileCamera" accept="image/*" capture="environment" />
+  <input type="file" id="fileUpload" accept="image/*" />
+
+  <!-- Control buttons -->
+  <div class="controls">
+    <button class="btn btn-camera"  id="btnCamera" >
+      <svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"
+           viewBox="0 0 24 24"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1
+           2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
+      ถ่ายภาพ
+    </button>
+    <button class="btn btn-upload"  id="btnUpload">
+      <svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"
+           viewBox="0 0 24 24"><polyline points="16 16 12 12 8 16"/><line x1="12" y1="12"
+           x2="12" y2="21"/><path d="M20.39 18.39A5 5 0 0 0 18 9h-1.26A8 8 0 1 0 3
+           16.3"/></svg>
+      อัปโหลดภาพ
+    </button>
+    <button class="btn btn-process" id="btnProcess" disabled>
+      <svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"
+           viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.07 4.93a10 10
+           0 0 1 0 14.14M4.93 4.93a10 10 0 0 0 0 14.14"/></svg>
+      ประมวลผล
+    </button>
+    <button class="btn btn-reset"   id="btnReset"   disabled>
+      รีเซ็ต
+    </button>
+  </div>
+
+  <!-- Canvas display area -->
+  <div class="canvas-wrapper" id="canvasWrapper">
+    <div class="canvas-placeholder" id="placeholder">
+      ยังไม่มีภาพ<br>กดถ่ายภาพหรืออัปโหลดเพื่อเริ่มต้น
+    </div>
+    <canvas id="canvas"></canvas>
+  </div>
+
+  <!-- Status bar -->
+  <div id="statusBar" class="info">รอภาพ...</div>
+
+  <!-- Result box -->
+  <div id="resultBox">
+    <div class="label">จำนวนแผ่นเหล็กที่ตรวจพบ</div>
+    <div class="count" id="sheetCount">–</div>
+  </div>
+
+  <!-- OpenCV badge -->
+  <div id="opencvStatus">OpenCV: กำลังโหลด...</div>
+
+  <!-- OpenCV.js (async, asm.js build) -->
+  <script>
+    // OpenCV.js callback — called automatically when the library is ready
+    function onOpenCvReady() {
+      const badge = document.getElementById('opencvStatus');
+      badge.textContent = 'OpenCV: พร้อม';
+      badge.classList.add('ready');
+      setStatus('OpenCV โหลดสำเร็จ พร้อมประมวลผล', 'ok');
+      console.log('[OpenCV] version:', cv.getBuildInformation().split('\n')[0]);
+    }
+  </script>
+  <script
+    async
+    src="https://docs.opencv.org/4.10.0/opencv.js"
+    onload="onOpenCvReady()"
+    onerror="(() => {
+      const b = document.getElementById('opencvStatus');
+      b.textContent = 'OpenCV: โหลดไม่สำเร็จ';
+      b.classList.add('error');
+      setStatus('ไม่สามารถโหลด OpenCV.js ได้ ตรวจสอบการเชื่อมต่ออินเทอร์เน็ต', 'error');
+    })()"
+  ></script>
+
+  <script>
+    /* ============================================================
+       State
+    ============================================================ */
+    let currentImageData = null;   // ImageData of the loaded image (for CV)
+    let currentObjectURL = null;   // Object URL for canvas drawing
+
+    /* ============================================================
+       DOM refs
+    ============================================================ */
+    const canvas        = document.getElementById('canvas');
+    const ctx           = canvas.getContext('2d');
+    const placeholder   = document.getElementById('placeholder');
+    const btnCamera     = document.getElementById('btnCamera');
+    const btnUpload     = document.getElementById('btnUpload');
+    const btnProcess    = document.getElementById('btnProcess');
+    const btnReset      = document.getElementById('btnReset');
+    const fileCamera    = document.getElementById('fileCamera');
+    const fileUpload    = document.getElementById('fileUpload');
+    const statusBar     = document.getElementById('statusBar');
+    const resultBox     = document.getElementById('resultBox');
+    const sheetCount    = document.getElementById('sheetCount');
+
+    /* ============================================================
+       Helpers
+    ============================================================ */
+    function setStatus(msg, type = 'info') {
+      statusBar.textContent = msg;
+      statusBar.className = type;
+    }
+
+    function drawImageToCanvas(file) {
+      if (currentObjectURL) URL.revokeObjectURL(currentObjectURL);
+      currentObjectURL = URL.createObjectURL(file);
+
+      const img = new Image();
+      img.onload = () => {
+        canvas.width  = img.naturalWidth;
+        canvas.height = img.naturalHeight;
+        ctx.drawImage(img, 0, 0);
+
+        // Capture raw pixel data for OpenCV
+        currentImageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+
+        placeholder.style.display = 'none';
+        canvas.style.display = 'block';
+
+        btnProcess.disabled = false;
+        btnReset.disabled   = false;
+
+        resultBox.style.display = 'none';
+        sheetCount.textContent  = '–';
+
+        setStatus(`โหลดภาพสำเร็จ: ${canvas.width} x ${canvas.height} px`, 'ok');
+      };
+      img.onerror = () => setStatus('ไม่สามารถโหลดไฟล์ภาพได้', 'error');
+      img.src = currentObjectURL;
+    }
+
+    function resetAll() {
+      if (currentObjectURL) { URL.revokeObjectURL(currentObjectURL); currentObjectURL = null; }
+      currentImageData = null;
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      canvas.style.display = 'none';
+      placeholder.style.display = '';
+      btnProcess.disabled = true;
+      btnReset.disabled   = true;
+      resultBox.style.display = 'none';
+      sheetCount.textContent  = '–';
+      fileCamera.value = '';
+      fileUpload.value = '';
+      setStatus('รีเซ็ตแล้ว รอภาพใหม่...', 'info');
+    }
+
+    /* ============================================================
+       Event wiring
+    ============================================================ */
+    btnCamera.addEventListener('click', () => fileCamera.click());
+    btnUpload.addEventListener('click', () => fileUpload.click());
+
+    fileCamera.addEventListener('change', (e) => {
+      if (e.target.files[0]) drawImageToCanvas(e.target.files[0]);
+    });
+
+    fileUpload.addEventListener('change', (e) => {
+      if (e.target.files[0]) drawImageToCanvas(e.target.files[0]);
+    });
+
+    btnReset.addEventListener('click', resetAll);
+
+    btnProcess.addEventListener('click', () => {
+      if (!currentImageData) {
+        setStatus('กรุณาโหลดภาพก่อน', 'error');
+        return;
+      }
+      processImage();
+    });
+
+    /* ============================================================
+       Image Processing  (stub — implement edge detection here)
+    ============================================================ */
+    function processImage() {
+      if (typeof cv === 'undefined') {
+        setStatus('OpenCV ยังไม่พร้อม กรุณารอสักครู่...', 'error');
+        return;
+      }
+
+      setStatus('กำลังประมวลผล...', 'info');
+      btnProcess.disabled = true;
+
+      // --- สเตปถัดไป: ใส่ logic ตรวจจับเส้นขอบแผ่นเหล็กที่นี่ ---
+      //
+      // ตัวอย่างขั้นตอนที่จะมาเพิ่ม:
+      //   1. cv.imread / สร้าง Mat จาก canvas
+      //   2. แปลงเป็น Grayscale  → cv.cvtColor
+      //   3. Gaussian Blur       → cv.GaussianBlur
+      //   4. Canny Edge          → cv.Canny
+      //   5. HoughLines / Contour → นับแผ่น
+      //   6. วาดผลลัพธ์กลับบน canvas → cv.imshow
+      //
+      // ตัวอย่างโครงสร้าง (ยังไม่ activate):
+      /*
+      const src  = cv.imread(canvas);
+      const gray = new cv.Mat();
+      const blur = new cv.Mat();
+      const edges= new cv.Mat();
+
+      cv.cvtColor(src, gray, cv.COLOR_RGBA2GRAY);
+      cv.GaussianBlur(gray, blur, new cv.Size(5,5), 0);
+      cv.Canny(blur, edges, 50, 150);
+
+      cv.imshow(canvas, edges);
+
+      const count = detectSheets(edges);   // ← function ที่จะ implement
+      displayResult(count);
+
+      src.delete(); gray.delete(); blur.delete(); edges.delete();
+      */
+
+      // Placeholder result (ลบออกเมื่อ implement จริง)
+      setTimeout(() => {
+        setStatus('ประมวลผลเสร็จสิ้น (stub — รอ implement)', 'ok');
+        displayResult('?');
+        btnProcess.disabled = false;
+      }, 500);
+    }
+
+    function detectSheets(edgeMat) {
+      // TODO: implement sheet-counting logic
+      // คืนค่าเป็นตัวเลขจำนวนแผ่นที่ตรวจพบ
+      return 0;
+    }
+
+    function displayResult(count) {
+      sheetCount.textContent  = count;
+      resultBox.style.display = 'block';
+    }
+  </script>
+</body>
+</html>
