@@ -96,7 +96,10 @@
       max-width: 100%;
       max-height: 100%;
       object-fit: contain;
+      cursor: default;
     }
+
+    body.thickness-mode #canvas { cursor: crosshair; }
 
     /* ---- Status bar ---- */
     #statusBar {
@@ -230,6 +233,121 @@
       color: #0f3460;
       background: #eef2ff;
     }
+
+    /* ---- Main mode tabs ---- */
+    .mode-tabs {
+      display: flex;
+      width: 100%;
+      max-width: 720px;
+      background: #fff;
+      border-radius: 10px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.07);
+      overflow: hidden;
+      margin-bottom: 16px;
+    }
+
+    .mode-tab {
+      flex: 1;
+      padding: 12px;
+      border: none;
+      background: transparent;
+      font-size: 0.9rem;
+      font-weight: 600;
+      cursor: pointer;
+      color: #888;
+      border-bottom: 3px solid transparent;
+      transition: all 0.2s;
+    }
+
+    .mode-tab.active {
+      color: #0f3460;
+      border-bottom-color: #0f3460;
+      background: #f5f7ff;
+    }
+
+    /* ---- Thickness panel ---- */
+    .thickness-panel {
+      display: none;
+      width: 100%;
+      max-width: 720px;
+      background: #fff;
+      border-radius: 10px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.07);
+      padding: 16px;
+      margin-bottom: 16px;
+      gap: 12px;
+      flex-direction: column;
+    }
+
+    .thickness-panel.visible { display: flex; }
+
+    .thickness-row {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+      align-items: flex-end;
+    }
+
+    .thickness-field {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      flex: 1;
+      min-width: 130px;
+    }
+
+    .thickness-field label {
+      font-size: 0.8rem;
+      font-weight: 600;
+      color: #555;
+    }
+
+    .thickness-field select,
+    .thickness-field input[type=number] {
+      padding: 8px 10px;
+      border: 1.5px solid #ddd;
+      border-radius: 7px;
+      font-size: 0.92rem;
+      outline: none;
+      transition: border-color 0.2s;
+    }
+
+    .thickness-field select:focus,
+    .thickness-field input[type=number]:focus { border-color: #0f3460; }
+
+    .btn-calc {
+      padding: 9px 20px;
+      background: #0f3460;
+      color: #fff;
+      border: none;
+      border-radius: 7px;
+      font-size: 0.92rem;
+      font-weight: 700;
+      cursor: pointer;
+      white-space: nowrap;
+    }
+
+    .btn-calc:disabled { opacity: 0.4; cursor: not-allowed; }
+
+    /* ---- Measurement hint on canvas ---- */
+    .meas-hint {
+      display: none;
+      position: absolute;
+      top: 8px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: rgba(15,52,96,0.85);
+      color: #fff;
+      padding: 5px 14px;
+      border-radius: 20px;
+      font-size: 0.78rem;
+      font-weight: 600;
+      pointer-events: none;
+      white-space: nowrap;
+      z-index: 10;
+    }
+
+    .canvas-wrapper { position: relative; }
   </style>
 </head>
 <body>
@@ -267,6 +385,61 @@
     <button class="btn btn-reset"   id="btnReset"   disabled>
       รีเซ็ต
     </button>
+  </div>
+
+  <!-- Main mode tabs -->
+  <div class="mode-tabs">
+    <button class="mode-tab active" id="tabCV"        onclick="switchMode('cv')">CV ตรวจจับเส้น</button>
+    <button class="mode-tab"        id="tabThickness" onclick="switchMode('thickness')">วัดจากความหนา</button>
+  </div>
+
+  <!-- Thickness panel -->
+  <div class="thickness-panel" id="thicknessPanel">
+    <div style="font-size:0.85rem;color:#555;line-height:1.6">
+      <strong style="color:#0f3460">วิธีใช้:</strong>
+      โหลดภาพ → คลิก <strong>จุดบนสุด</strong> ของกองเหล็ก → คลิก <strong>จุดล่างสุด</strong>
+      → กรอกความสูงจริงและความหนาแผ่น → กด คำนวณ
+    </div>
+    <div class="thickness-row">
+      <div class="thickness-field">
+        <label>ความหนาต่อแผ่น (mm)</label>
+        <select id="thicknessSelect" onchange="onThicknessChange()">
+          <option value="">-- เลือก --</option>
+          <optgroup label="บาง">
+            <option value="0.4">0.4 mm</option>
+            <option value="0.5">0.5 mm</option>
+            <option value="0.6">0.6 mm</option>
+            <option value="0.8">0.8 mm</option>
+          </optgroup>
+          <optgroup label="มาตรฐาน">
+            <option value="1.0">1.0 mm</option>
+            <option value="1.2">1.2 mm</option>
+            <option value="1.5">1.5 mm</option>
+            <option value="2.0">2.0 mm</option>
+            <option value="2.5">2.5 mm</option>
+            <option value="3.0">3.0 mm</option>
+          </optgroup>
+          <optgroup label="หนา">
+            <option value="3.2">3.2 mm</option>
+            <option value="4.0">4.0 mm</option>
+            <option value="4.5">4.5 mm</option>
+            <option value="5.0">5.0 mm</option>
+            <option value="6.0">6.0 mm</option>
+          </optgroup>
+          <option value="custom">กำหนดเอง...</option>
+        </select>
+      </div>
+      <div class="thickness-field" id="customThicknessField" style="display:none">
+        <label>ระบุความหนา (mm)</label>
+        <input type="number" id="customThickness" min="0.1" max="50" step="0.1" placeholder="เช่น 1.8">
+      </div>
+      <div class="thickness-field">
+        <label>ความสูงกองจริง (mm)</label>
+        <input type="number" id="stackHeightMm" min="1" max="9999" step="0.5" placeholder="วัดจากไม้บรรทัด">
+      </div>
+      <button class="btn-calc" id="btnCalc" onclick="calcThickness()">คำนวณ</button>
+    </div>
+    <div id="measInfo" style="font-size:0.82rem;color:#888;min-height:18px"></div>
   </div>
 
   <!-- Parameter panel -->
@@ -318,6 +491,7 @@
       ยังไม่มีภาพ<br>กดถ่ายภาพหรืออัปโหลดเพื่อเริ่มต้น
     </div>
     <canvas id="canvas"></canvas>
+    <div class="meas-hint" id="measHint">คลิกที่ขอบบนสุดของกองเหล็ก</div>
   </div>
 
   <!-- Status bar -->
@@ -408,6 +582,9 @@
         resultBox.style.display = 'none';
         sheetCount.textContent  = '–';
 
+        measurePts = [];
+        measInfo.textContent = '';
+        if (activeMode === 'thickness') showMeasHint(0);
         setStatus(`โหลดภาพสำเร็จ: ${canvas.width} x ${canvas.height} px`, 'ok');
       };
       img.onerror = () => setStatus('ไม่สามารถโหลดไฟล์ภาพได้', 'error');
@@ -445,6 +622,9 @@
 
     btnReset.addEventListener('click', () => {
       resetAll();
+      measurePts = [];
+      measInfo.textContent = '';
+      hideMeasHint();
       if (lastEdgeMat)   { try { lastEdgeMat.delete();   } catch(_){} lastEdgeMat   = null; }
       if (lastResultMat) { try { lastResultMat.delete();  } catch(_){} lastResultMat = null; }
     });
@@ -456,6 +636,156 @@
       }
       processImage();
     });
+
+    /* ============================================================
+       Mode switching — CV vs Thickness
+    ============================================================ */
+    let activeMode = 'cv';
+
+    function switchMode(mode) {
+      activeMode = mode;
+      document.getElementById('tabCV').classList.toggle('active', mode === 'cv');
+      document.getElementById('tabThickness').classList.toggle('active', mode === 'thickness');
+      document.body.classList.toggle('thickness-mode', mode === 'thickness');
+      document.getElementById('paramPanel').style.display = mode === 'cv' ? '' : 'none';
+      document.getElementById('thicknessPanel').classList.toggle('visible', mode === 'thickness');
+      document.querySelector('.view-toggle').style.display = mode === 'cv' ? '' : 'none';
+      btnProcess.style.display = mode === 'cv' ? '' : 'none';
+
+      if (mode === 'thickness') {
+        measurePts = [];
+        if (currentImageData) {
+          redrawOriginal();
+          showMeasHint(0);
+        }
+      } else {
+        hideMeasHint();
+        measurePts = [];
+        if (lastResultMat) cv.imshow(canvas, lastResultMat);
+        else if (currentImageData) redrawOriginal();
+      }
+    }
+
+    /* ============================================================
+       Thickness mode — two-click measurement
+    ============================================================ */
+    const measHint   = document.getElementById('measHint');
+    const measInfo   = document.getElementById('measInfo');
+    let measurePts   = [];   // canvas-internal Y coordinates (0, 1, or 2)
+
+    function showMeasHint(step) {
+      measHint.style.display = 'block';
+      measHint.textContent = step === 0
+        ? 'คลิกที่ขอบบนสุดของกองเหล็ก'
+        : 'คลิกที่ขอบล่างสุดของกองเหล็ก';
+    }
+
+    function hideMeasHint() { measHint.style.display = 'none'; }
+
+    function onThicknessChange() {
+      const sel = document.getElementById('thicknessSelect').value;
+      document.getElementById('customThicknessField').style.display =
+        sel === 'custom' ? '' : 'none';
+    }
+
+    // Convert CSS-pixel click position → canvas internal pixel Y
+    function cssToCanvasY(cssY) {
+      const rect  = canvas.getBoundingClientRect();
+      const scaleY = canvas.height / rect.height;
+      return Math.round(cssY * scaleY);
+    }
+
+    function redrawOriginal() {
+      if (!currentImageData) return;
+      ctx.putImageData(currentImageData, 0, 0);
+    }
+
+    function drawMeasurementOverlay() {
+      redrawOriginal();
+      const colors = ['#facc15', '#f97316'];   // yellow, orange
+      const labels = ['TOP', 'BOT'];
+      measurePts.forEach((py, i) => {
+        ctx.save();
+        ctx.strokeStyle = colors[i];
+        ctx.lineWidth   = Math.max(2, canvas.width / 300);
+        ctx.setLineDash([12, 6]);
+        ctx.beginPath();
+        ctx.moveTo(0, py);
+        ctx.lineTo(canvas.width, py);
+        ctx.stroke();
+        // Label badge
+        ctx.setLineDash([]);
+        ctx.fillStyle = colors[i];
+        ctx.font = `bold ${Math.max(14, canvas.width / 50)}px sans-serif`;
+        ctx.fillRect(4, py - Math.max(16, canvas.width / 40), 52, Math.max(18, canvas.width / 38));
+        ctx.fillStyle = '#000';
+        ctx.fillText(labels[i], 8, py - 3);
+        ctx.restore();
+      });
+
+      // Draw bracket between points if both marked
+      if (measurePts.length === 2) {
+        const [y1, y2] = [Math.min(...measurePts), Math.max(...measurePts)];
+        const cx = canvas.width - 30;
+        ctx.save();
+        ctx.strokeStyle = '#22d3ee';
+        ctx.lineWidth   = Math.max(2, canvas.width / 400);
+        ctx.beginPath();
+        ctx.moveTo(cx, y1); ctx.lineTo(cx, y2);
+        ctx.moveTo(cx - 8, y1); ctx.lineTo(cx + 8, y1);
+        ctx.moveTo(cx - 8, y2); ctx.lineTo(cx + 8, y2);
+        ctx.stroke();
+        ctx.restore();
+      }
+    }
+
+    canvas.addEventListener('click', (e) => {
+      if (activeMode !== 'thickness' || !currentImageData) return;
+      const rect = canvas.getBoundingClientRect();
+      const canvasY = cssToCanvasY(e.clientY - rect.top);
+
+      if (measurePts.length >= 2) {
+        // Reset and start over
+        measurePts = [];
+        measInfo.textContent = '';
+      }
+
+      measurePts.push(canvasY);
+      drawMeasurementOverlay();
+
+      if (measurePts.length === 1) {
+        showMeasHint(1);
+        measInfo.textContent = `TOP: y = ${canvasY}px`;
+      } else {
+        hideMeasHint();
+        const heightPx = Math.abs(measurePts[1] - measurePts[0]);
+        measInfo.innerHTML =
+          `TOP: ${measurePts[0]}px &nbsp;|&nbsp; BOT: ${measurePts[1]}px &nbsp;|&nbsp; ` +
+          `<strong>ความสูงกอง: ${heightPx}px</strong> &nbsp;— กรอกความสูงจริง (mm) แล้วกด คำนวณ`;
+      }
+    });
+
+    function calcThickness() {
+      const sel = document.getElementById('thicknessSelect').value;
+      const customVal = parseFloat(document.getElementById('customThickness').value);
+      const thickness = sel === 'custom' ? customVal : parseFloat(sel);
+      const stackMm   = parseFloat(document.getElementById('stackHeightMm').value);
+
+      if (!thickness || thickness <= 0) {
+        setStatus('กรุณาเลือกหรือกรอกความหนาแผ่นเหล็ก', 'error'); return;
+      }
+      if (!stackMm || stackMm <= 0) {
+        setStatus('กรุณากรอกความสูงกองจริง (mm)', 'error'); return;
+      }
+
+      const raw   = stackMm / thickness;
+      const count = Math.round(raw);
+      displayResult(count);
+      setStatus(
+        `${stackMm} mm ÷ ${thickness} mm/แผ่น = ${raw.toFixed(2)} ≈ ${count} แผ่น`,
+        'ok'
+      );
+    }
 
     /* ============================================================
        View state — keeps original ImageData for toggling views
