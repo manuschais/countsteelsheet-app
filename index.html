@@ -3,1639 +3,218 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>นับแผ่นเหล็ก</title>
+  <title>ระบบนับแผ่นเหล็ก</title>
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
     body {
       font-family: 'Segoe UI', sans-serif;
-      background: #f0f2f5;
-      color: #1a1a2e;
+      background: #0f172a;
+      color: #e2e8f0;
       min-height: 100vh;
       display: flex;
       flex-direction: column;
       align-items: center;
-      padding: 24px 16px;
+      justify-content: center;
+      padding: 32px 16px;
+      gap: 32px;
     }
 
-    header {
-      text-align: center;
-      margin-bottom: 24px;
-    }
+    header { text-align: center; }
 
     header h1 {
-      font-size: 1.6rem;
-      font-weight: 700;
-      color: #16213e;
+      font-size: 2rem;
+      font-weight: 800;
+      letter-spacing: -0.5px;
+      background: linear-gradient(135deg, #60a5fa, #818cf8);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
     }
 
     header p {
-      font-size: 0.9rem;
-      color: #555;
-      margin-top: 4px;
+      margin-top: 8px;
+      font-size: 0.95rem;
+      color: #94a3b8;
     }
 
-    /* ---- Control Panel ---- */
-    .controls {
+    .cards {
       display: flex;
-      gap: 12px;
+      gap: 20px;
       flex-wrap: wrap;
       justify-content: center;
-      margin-bottom: 20px;
+      width: 100%;
+      max-width: 760px;
     }
 
-    .btn {
+    .card {
+      flex: 1;
+      min-width: 260px;
+      max-width: 340px;
+      background: #1e293b;
+      border: 1px solid #334155;
+      border-radius: 16px;
+      padding: 28px 24px;
+      text-decoration: none;
+      color: inherit;
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+      transition: transform 0.18s, border-color 0.18s, box-shadow 0.18s;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .card:hover {
+      transform: translateY(-4px);
+      border-color: #60a5fa;
+      box-shadow: 0 12px 32px rgba(96,165,250,0.15);
+    }
+
+    .card-badge {
       display: inline-flex;
       align-items: center;
-      gap: 8px;
-      padding: 10px 20px;
-      border: none;
-      border-radius: 8px;
-      font-size: 0.95rem;
-      font-weight: 600;
-      cursor: pointer;
-      transition: opacity 0.2s, transform 0.1s;
-    }
-
-    .btn:active { transform: scale(0.97); }
-    .btn:disabled { opacity: 0.45; cursor: not-allowed; }
-
-    .btn-camera   { background: #0f3460; color: #fff; }
-    .btn-upload   { background: #e94560; color: #fff; }
-    .btn-process  { background: #16213e; color: #fff; }
-    .btn-reset    { background: #ddd;    color: #333; }
-
-    /* hidden file inputs */
-    #fileCamera, #fileUpload { display: none; }
-
-    /* ---- Canvas area ---- */
-    .canvas-wrapper {
-      position: relative;
-      width: 100%;
-      max-width: 720px;
-      background: #fff;
-      border-radius: 12px;
-      box-shadow: 0 4px 20px rgba(0,0,0,0.10);
-      overflow: hidden;
-      aspect-ratio: 4/3;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-    }
-
-    .canvas-placeholder {
-      color: #aaa;
-      font-size: 0.95rem;
-      text-align: center;
-      pointer-events: none;
-      user-select: none;
-    }
-
-    #canvas {
-      display: none;
-      max-width: 100%;
-      max-height: 100%;
-      object-fit: contain;
-      cursor: default;
-    }
-
-    body.thickness-mode #canvas { cursor: crosshair; }
-
-    /* ---- Status bar ---- */
-    #statusBar {
-      width: 100%;
-      max-width: 720px;
-      margin-top: 12px;
-      padding: 10px 16px;
-      background: #fff;
-      border-radius: 8px;
-      box-shadow: 0 2px 8px rgba(0,0,0,0.07);
-      font-size: 0.88rem;
-      color: #444;
-      min-height: 40px;
-    }
-
-    #statusBar.error  { border-left: 4px solid #e94560; }
-    #statusBar.info   { border-left: 4px solid #0f3460; }
-    #statusBar.ok     { border-left: 4px solid #28a745; }
-
-    /* ---- Result box ---- */
-    #resultBox {
-      display: none;
-      width: 100%;
-      max-width: 720px;
-      margin-top: 12px;
-      padding: 16px 20px;
-      background: #fff;
-      border-radius: 8px;
-      box-shadow: 0 2px 8px rgba(0,0,0,0.07);
-      text-align: center;
-    }
-
-    #resultBox .label { font-size: 0.85rem; color: #666; }
-    #resultBox .count { font-size: 2.8rem; font-weight: 700; color: #0f3460; line-height: 1.2; }
-
-    /* ---- OpenCV loading badge ---- */
-    #opencvStatus {
-      position: fixed;
-      bottom: 16px;
-      right: 16px;
-      padding: 6px 12px;
+      gap: 6px;
+      padding: 3px 10px;
       border-radius: 20px;
-      font-size: 0.78rem;
-      font-weight: 600;
-      background: #ddd;
-      color: #555;
-      transition: background 0.4s, color 0.4s;
+      font-size: 0.72rem;
+      font-weight: 700;
+      width: fit-content;
     }
 
-    #opencvStatus.ready { background: #d4edda; color: #155724; }
-    #opencvStatus.error { background: #f8d7da; color: #721c24; }
+    .badge-stable { background: #166534; color: #86efac; }
+    .badge-new    { background: #1e3a8a; color: #93c5fd; }
 
-    /* ---- Parameter panel ---- */
-    .param-panel {
-      width: 100%;
-      max-width: 720px;
-      background: #fff;
-      border-radius: 10px;
-      box-shadow: 0 2px 8px rgba(0,0,0,0.07);
-      margin-bottom: 16px;
-      overflow: hidden;
+    .card-icon {
+      font-size: 2.4rem;
+      line-height: 1;
     }
 
-    .param-panel summary {
-      padding: 10px 16px;
-      font-size: 0.88rem;
-      font-weight: 600;
-      color: #0f3460;
-      cursor: pointer;
-      user-select: none;
+    .card-title {
+      font-size: 1.2rem;
+      font-weight: 700;
+      color: #f1f5f9;
+    }
+
+    .card-desc {
+      font-size: 0.85rem;
+      color: #94a3b8;
+      line-height: 1.65;
+    }
+
+    .card-features {
       list-style: none;
       display: flex;
+      flex-direction: column;
+      gap: 5px;
+    }
+
+    .card-features li {
+      font-size: 0.8rem;
+      color: #94a3b8;
+      display: flex;
       align-items: center;
-      gap: 8px;
+      gap: 7px;
     }
 
-    .param-panel summary::before {
-      content: '▶';
-      font-size: 0.7rem;
-      transition: transform 0.2s;
-    }
-
-    .param-panel[open] summary::before { transform: rotate(90deg); }
-
-    .param-grid {
-      display: grid;
-      grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
-      gap: 12px;
-      padding: 0 16px 16px;
-    }
-
-    .param-item label {
-      display: flex;
-      justify-content: space-between;
-      font-size: 0.8rem;
-      color: #555;
-      margin-bottom: 4px;
-    }
-
-    .param-item label span { font-weight: 700; color: #0f3460; }
-
-    .param-item input[type=range] {
-      width: 100%;
-      accent-color: #0f3460;
-    }
-
-    /* ---- Mode toggle ---- */
-    .view-toggle {
-      display: flex;
-      gap: 8px;
-      width: 100%;
-      max-width: 720px;
-      margin-bottom: 12px;
-    }
-
-    .view-toggle button {
-      flex: 1;
-      padding: 6px 12px;
-      border: 2px solid #ddd;
-      border-radius: 6px;
-      background: #fff;
-      font-size: 0.82rem;
-      font-weight: 600;
-      cursor: pointer;
-      color: #555;
-      transition: all 0.2s;
-    }
-
-    .view-toggle button.active {
-      border-color: #0f3460;
-      color: #0f3460;
-      background: #eef2ff;
-    }
-
-    /* ---- Main mode tabs ---- */
-    .mode-tabs {
-      display: flex;
-      width: 100%;
-      max-width: 720px;
-      background: #fff;
-      border-radius: 10px;
-      box-shadow: 0 2px 8px rgba(0,0,0,0.07);
-      overflow: hidden;
-      margin-bottom: 16px;
-    }
-
-    .mode-tab {
-      flex: 1;
-      padding: 12px;
-      border: none;
-      background: transparent;
-      font-size: 0.9rem;
-      font-weight: 600;
-      cursor: pointer;
-      color: #888;
-      border-bottom: 3px solid transparent;
-      transition: all 0.2s;
-    }
-
-    .mode-tab.active {
-      color: #0f3460;
-      border-bottom-color: #0f3460;
-      background: #f5f7ff;
-    }
-
-    /* ---- Thickness panel ---- */
-    .thickness-panel {
-      display: none;
-      width: 100%;
-      max-width: 720px;
-      background: #fff;
-      border-radius: 10px;
-      box-shadow: 0 2px 8px rgba(0,0,0,0.07);
-      padding: 16px;
-      margin-bottom: 16px;
-      gap: 12px;
-      flex-direction: column;
-    }
-
-    .thickness-panel.visible { display: flex; }
-
-    .thickness-row {
-      display: flex;
-      gap: 10px;
-      flex-wrap: wrap;
-      align-items: flex-end;
-    }
-
-    .thickness-field {
-      display: flex;
-      flex-direction: column;
-      gap: 4px;
-      flex: 1;
-      min-width: 130px;
-    }
-
-    .thickness-field label {
-      font-size: 0.8rem;
-      font-weight: 600;
-      color: #555;
-    }
-
-    .thickness-field select,
-    .thickness-field input[type=number] {
-      padding: 8px 10px;
-      border: 1.5px solid #ddd;
-      border-radius: 7px;
-      font-size: 0.92rem;
-      outline: none;
-      transition: border-color 0.2s;
-    }
-
-    .thickness-field select:focus,
-    .thickness-field input[type=number]:focus { border-color: #0f3460; }
-
-    .btn-calc {
-      padding: 9px 20px;
-      background: #0f3460;
-      color: #fff;
-      border: none;
-      border-radius: 7px;
-      font-size: 0.92rem;
+    .card-features li::before {
+      content: '✓';
+      color: #4ade80;
       font-weight: 700;
-      cursor: pointer;
-      white-space: nowrap;
+      font-size: 0.75rem;
+      flex-shrink: 0;
     }
 
-    .btn-calc:disabled { opacity: 0.4; cursor: not-allowed; }
-
-    /* ---- Measurement hint on canvas ---- */
-    .meas-hint {
-      display: none;
-      position: absolute;
-      top: 8px;
-      left: 50%;
-      transform: translateX(-50%);
-      background: rgba(15,52,96,0.85);
-      color: #fff;
-      padding: 5px 14px;
-      border-radius: 20px;
-      font-size: 0.78rem;
+    .card-cta {
+      margin-top: auto;
+      padding: 10px 0;
+      border-radius: 8px;
+      background: #334155;
+      color: #e2e8f0;
+      text-align: center;
+      font-size: 0.88rem;
       font-weight: 600;
-      pointer-events: none;
-      white-space: nowrap;
-      z-index: 10;
-    }
-
-    .canvas-wrapper { position: relative; touch-action: none; }
-
-    /* ---- Zoom layer ---- */
-    #zoomLayer {
-      width: 100%;
-      height: 100%;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      transform-origin: center center;
-      will-change: transform;
-    }
-
-    /* ---- Small action buttons ---- */
-    .btn-sm {
-      display: inline-flex;
-      align-items: center;
-      gap: 5px;
-      padding: 6px 13px;
-      border: 2px solid;
-      border-radius: 6px;
-      font-size: 0.82rem;
-      font-weight: 600;
-      cursor: pointer;
-      background: #fff;
-      transition: all 0.2s;
-      white-space: nowrap;
-    }
-    .btn-sm.teal   { border-color: #0891b2; color: #0891b2; }
-    .btn-sm.teal.active { background: #0891b2; color: #fff; }
-    .btn-sm.red    { border-color: #e94560; color: #e94560; }
-    .btn-sm.orange { border-color: #f97316; color: #f97316; }
-    .btn-sm.orange.active { background: #f97316; color: #fff; }
-    .btn-sm.gray   { border-color: #aaa; color: #666; }
-    .btn-sm:disabled { opacity: 0.38; cursor: not-allowed; }
-
-    /* ---- Zone / manual toolbars ---- */
-    .sub-toolbar {
-      display: flex;
-      gap: 8px;
-      width: 100%;
-      max-width: 720px;
-      margin-bottom: 12px;
-      flex-wrap: wrap;
-      align-items: center;
-    }
-    .sub-toolbar .label {
-      font-size: 0.78rem;
-      color: #888;
-      flex: 1;
-    }
-
-    /* ---- Manual count panel ---- */
-    .manual-panel {
-      display: none;
-      width: 100%;
-      max-width: 720px;
-      background: #fff;
-      border-radius: 10px;
-      box-shadow: 0 2px 8px rgba(0,0,0,0.07);
-      padding: 14px 16px;
-      margin-top: 10px;
-      flex-direction: column;
-      gap: 10px;
-    }
-    .manual-panel.visible { display: flex; }
-    .manual-tally { font-size: 0.88rem; color: #444; min-height: 18px; }
-    .manual-tally strong { font-size: 1.05rem; color: #0f3460; }
-
-    /* Cursor variants by body mode */
-    body.roi-select-mode   #canvas { cursor: crosshair; }
-    body.manual-count-mode #canvas { cursor: cell; }
-    body.can-pan           #canvas { cursor: grab; }
-    body.panning           #canvas { cursor: grabbing !important; }
-
-    /* ---- Image adjustment panel ---- */
-    .img-adj-panel {
-      width: 100%;
-      max-width: 720px;
-      background: #fff;
-      border-radius: 10px;
-      box-shadow: 0 2px 8px rgba(0,0,0,0.07);
-      padding: 10px 16px;
-      margin-bottom: 12px;
-      display: none;
-      gap: 10px;
-      flex-wrap: wrap;
-      align-items: flex-end;
-    }
-    .img-adj-panel.visible { display: flex; }
-    .adj-field { display: flex; flex-direction: column; gap: 3px; flex: 1; min-width: 130px; }
-    .adj-field label {
-      display: flex; justify-content: space-between;
-      font-size: 0.78rem; color: #555; font-weight: 600;
-    }
-    .adj-field label span { color: #0f3460; font-weight: 700; }
-    .adj-field input[type=range] { width: 100%; accent-color: #0f3460; }
-    .btn-reset-adj {
-      padding: 6px 12px; border: 1.5px solid #aaa; border-radius: 6px;
-      background: #fff; font-size: 0.78rem; cursor: pointer; color: #666;
-    }
-
-    /* ---- Floating overlay toolbar ---- */
-    #floatToolbar {
-      position: absolute;
-      bottom: 10px;
-      left: 50%;
-      transform: translateX(-50%);
-      display: none;
-      align-items: center;
-      gap: 5px;
-      padding: 6px 10px;
-      background: rgba(10, 14, 36, 0.82);
-      border-radius: 32px;
-      backdrop-filter: blur(6px);
-      -webkit-backdrop-filter: blur(6px);
-      z-index: 20;
-      max-width: calc(100% - 16px);
-      flex-wrap: wrap;
-      justify-content: center;
-    }
-    #floatToolbar.visible { display: flex; }
-    .ft-btn {
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-      padding: 5px 11px;
-      border: 1.5px solid rgba(255,255,255,0.22);
-      border-radius: 20px;
-      background: rgba(255,255,255,0.10);
-      color: #ddd;
-      font-size: 0.76rem;
-      font-weight: 600;
-      cursor: pointer;
-      white-space: nowrap;
       transition: background 0.15s;
-      user-select: none;
     }
-    .ft-btn:active { background: rgba(255,255,255,0.25); }
-    .ft-btn.on-orange { background: #f97316; border-color: #f97316; color: #fff; }
-    .ft-btn.on-teal   { background: #0891b2; border-color: #0891b2; color: #fff; }
-    .ft-btn.on-purple { background: #7c3aed; border-color: #7c3aed; color: #fff; }
-    .ft-btn:disabled  { opacity: 0.3; cursor: not-allowed; }
-    .ft-sep { width: 1px; height: 22px; background: rgba(255,255,255,0.18); flex-shrink: 0; }
-    .ft-group { display: flex; align-items: center; gap: 4px; }
-    .ft-lbl  { font-size: 0.64rem; color: rgba(255,255,255,0.5); white-space: nowrap; }
-    .ft-slider { width: 62px; accent-color: #f97316; cursor: pointer; }
+
+    .card:hover .card-cta { background: #60a5fa; color: #0f172a; }
+
+    .card-v2 { border-color: #312e81; }
+    .card-v2:hover { border-color: #818cf8; box-shadow: 0 12px 32px rgba(129,140,248,0.15); }
+    .card-v2:hover .card-cta { background: #818cf8; color: #0f172a; }
+
+    .corner-ribbon {
+      position: absolute;
+      top: 12px;
+      right: -22px;
+      background: #7c3aed;
+      color: #fff;
+      font-size: 0.62rem;
+      font-weight: 700;
+      padding: 3px 30px;
+      transform: rotate(35deg);
+      letter-spacing: 1px;
+    }
+
+    footer {
+      font-size: 0.75rem;
+      color: #475569;
+      text-align: center;
+    }
   </style>
 </head>
 <body>
 
   <header>
     <h1>ระบบนับแผ่นเหล็ก</h1>
-    <p>ถ่ายหรืออัปโหลดภาพเพื่อตรวจนับจำนวนแผ่น</p>
+    <p>เลือกเวอร์ชันที่ต้องการใช้งาน</p>
   </header>
 
-  <!-- Hidden file inputs -->
-  <input type="file" id="fileCamera" accept="image/*" capture="environment" />
-  <input type="file" id="fileUpload" accept="image/*" />
+  <div class="cards">
 
-  <!-- Control buttons -->
-  <div class="controls">
-    <button class="btn btn-camera"  id="btnCamera" >
-      <svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"
-           viewBox="0 0 24 24"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1
-           2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
-      ถ่ายภาพ
-    </button>
-    <button class="btn btn-upload"  id="btnUpload">
-      <svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"
-           viewBox="0 0 24 24"><polyline points="16 16 12 12 8 16"/><line x1="12" y1="12"
-           x2="12" y2="21"/><path d="M20.39 18.39A5 5 0 0 0 18 9h-1.26A8 8 0 1 0 3
-           16.3"/></svg>
-      อัปโหลดภาพ
-    </button>
-    <button class="btn btn-process" id="btnProcess" disabled>
-      <svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"
-           viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.07 4.93a10 10
-           0 0 1 0 14.14M4.93 4.93a10 10 0 0 0 0 14.14"/></svg>
-      ประมวลผล
-    </button>
-    <button class="btn btn-reset"   id="btnReset"   disabled>
-      รีเซ็ต
-    </button>
+    <!-- V1 Card -->
+    <a class="card" href="./v1.html">
+      <span class="card-badge badge-stable">✓ Stable</span>
+      <div class="card-icon">🔍</div>
+      <div class="card-title">รุ่น 1 — HTML Classic</div>
+      <p class="card-desc">
+        แอปนับแผ่นเหล็กแบบ Single-file HTML พร้อม OpenCV.js
+        ใช้งานได้ทันทีโดยไม่ต้องติดตั้ง
+      </p>
+      <ul class="card-features">
+        <li>CV ตรวจจับเส้นด้วย Canny + HoughLinesP</li>
+        <li>นับจากความหนาแผ่น (mm)</li>
+        <li>นับเพิ่มด้วยมือ + ลบ cluster AUTO</li>
+        <li>Zoom/Pan + Toolbar ลอยบนภาพ</li>
+        <li>ย้อมสี Heatmap + ปรับสว่าง/คมชัด</li>
+      </ul>
+      <div class="card-cta">เปิดรุ่น 1 →</div>
+    </a>
+
+    <!-- V2 Card -->
+    <a class="card card-v2" href="./v2/">
+      <div class="corner-ribbon">NEW</div>
+      <span class="card-badge badge-new">⚡ React</span>
+      <div class="card-icon">⚛️</div>
+      <div class="card-title">รุ่น 2 — React App</div>
+      <p class="card-desc">
+        เขียนด้วย React + Vite สถาปัตยกรรม Component-based
+        รองรับฟีเจอร์ที่ซับซ้อนและขยายต่อได้ง่าย
+      </p>
+      <ul class="card-features">
+        <li>Component-based — แก้ไข/ขยายง่าย</li>
+        <li>State management ด้วย React Hooks</li>
+        <li>UI สมัยใหม่ รองรับมือถือเต็มรูปแบบ</li>
+        <li>พร้อมรับฟีเจอร์ใหม่จากรุ่น 1</li>
+      </ul>
+      <div class="card-cta">เปิดรุ่น 2 →</div>
+    </a>
+
   </div>
 
-  <!-- Main mode tabs -->
-  <div class="mode-tabs">
-    <button class="mode-tab active" id="tabCV"        onclick="switchMode('cv')">CV ตรวจจับเส้น</button>
-    <button class="mode-tab"        id="tabThickness" onclick="switchMode('thickness')">วัดจากความหนา</button>
-  </div>
+  <footer>
+    ระบบนับแผ่นเหล็ก &nbsp;·&nbsp; GitHub Pages
+  </footer>
 
-  <!-- Thickness panel -->
-  <div class="thickness-panel" id="thicknessPanel">
-    <div style="font-size:0.85rem;color:#555;line-height:1.6">
-      <strong style="color:#0f3460">วิธีใช้:</strong>
-      โหลดภาพ → คลิก <strong>จุดบนสุด</strong> ของกองเหล็ก → คลิก <strong>จุดล่างสุด</strong>
-      → กรอกความสูงจริงและความหนาแผ่น → กด คำนวณ
-    </div>
-    <div class="thickness-row">
-      <div class="thickness-field">
-        <label>ความหนาต่อแผ่น (mm)</label>
-        <select id="thicknessSelect" onchange="onThicknessChange()">
-          <option value="">-- เลือก --</option>
-          <optgroup label="บาง">
-            <option value="0.4">0.4 mm</option>
-            <option value="0.5">0.5 mm</option>
-            <option value="0.6">0.6 mm</option>
-            <option value="0.8">0.8 mm</option>
-          </optgroup>
-          <optgroup label="มาตรฐาน">
-            <option value="1.0">1.0 mm</option>
-            <option value="1.2">1.2 mm</option>
-            <option value="1.5">1.5 mm</option>
-            <option value="2.0">2.0 mm</option>
-            <option value="2.5">2.5 mm</option>
-            <option value="3.0">3.0 mm</option>
-          </optgroup>
-          <optgroup label="หนา">
-            <option value="3.2">3.2 mm</option>
-            <option value="4.0">4.0 mm</option>
-            <option value="4.5">4.5 mm</option>
-            <option value="5.0">5.0 mm</option>
-            <option value="6.0">6.0 mm</option>
-          </optgroup>
-          <option value="custom">กำหนดเอง...</option>
-        </select>
-      </div>
-      <div class="thickness-field" id="customThicknessField" style="display:none">
-        <label>ระบุความหนา (mm)</label>
-        <input type="number" id="customThickness" min="0.1" max="50" step="0.1" placeholder="เช่น 1.8">
-      </div>
-      <div class="thickness-field">
-        <label>ความสูงกองจริง (mm)</label>
-        <input type="number" id="stackHeightMm" min="1" max="9999" step="0.5" placeholder="วัดจากไม้บรรทัด">
-      </div>
-      <button class="btn-calc" id="btnCalc" onclick="calcThickness()">คำนวณ</button>
-    </div>
-    <div id="measInfo" style="font-size:0.82rem;color:#888;min-height:18px"></div>
-  </div>
-
-  <!-- Parameter panel -->
-  <details class="param-panel" id="paramPanel">
-    <summary>ปรับพารามิเตอร์การตรวจจับ</summary>
-    <div class="param-grid">
-      <div class="param-item">
-        <label>Blur kernel <span id="valBlur">5</span></label>
-        <input type="range" id="paramBlur" min="1" max="15" step="2" value="5"
-               oninput="document.getElementById('valBlur').textContent=this.value">
-      </div>
-      <div class="param-item">
-        <label>Canny low <span id="valCannyLow">50</span></label>
-        <input type="range" id="paramCannyLow" min="5" max="150" step="5" value="50"
-               oninput="document.getElementById('valCannyLow').textContent=this.value">
-      </div>
-      <div class="param-item">
-        <label>Canny high <span id="valCannyHigh">150</span></label>
-        <input type="range" id="paramCannyHigh" min="50" max="400" step="10" value="150"
-               oninput="document.getElementById('valCannyHigh').textContent=this.value">
-      </div>
-      <div class="param-item">
-        <label>Min line length % <span id="valMinLen">25</span></label>
-        <input type="range" id="paramMinLen" min="5" max="80" step="5" value="25"
-               oninput="document.getElementById('valMinLen').textContent=this.value">
-      </div>
-      <div class="param-item">
-        <label>Cluster tolerance px <span id="valTolerance">20</span></label>
-        <input type="range" id="paramTolerance" min="5" max="60" step="5" value="20"
-               oninput="document.getElementById('valTolerance').textContent=this.value">
-      </div>
-      <div class="param-item">
-        <label>Max line gap px <span id="valGap">20</span></label>
-        <input type="range" id="paramGap" min="5" max="80" step="5" value="20"
-               oninput="document.getElementById('valGap').textContent=this.value">
-      </div>
-    </div>
-  </details>
-
-  <!-- Zone select toolbar (CV mode only) -->
-  <div class="sub-toolbar" id="zoneToolbar">
-    <button class="btn-sm teal" id="btnZoneSelect" onclick="toggleRoiSelect()" disabled>เลือกโซน ROI</button>
-    <button class="btn-sm red"  id="btnZoneClear"  onclick="clearRoi()" style="display:none">ล้างโซน</button>
-    <span class="label" id="zoneInfo"></span>
-    <button class="btn-sm gray" onclick="resetZoom()" title="รีเซ็ตซูม">1:1</button>
-  </div>
-
-  <!-- Image adjustment panel -->
-  <div class="img-adj-panel" id="imgAdjPanel">
-    <div class="adj-field">
-      <label>ความสว่าง <span id="valBrightness">0</span></label>
-      <input type="range" id="paramBrightness" min="-100" max="100" step="5" value="0"
-             oninput="document.getElementById('valBrightness').textContent=this.value; onAdjChange()">
-    </div>
-    <div class="adj-field">
-      <label>ความคมชัด <span id="valContrast">0</span></label>
-      <input type="range" id="paramContrast" min="-50" max="100" step="5" value="0"
-             oninput="document.getElementById('valContrast').textContent=this.value; onAdjChange()">
-    </div>
-    <button class="btn-reset-adj" onclick="resetAdj()">รีเซ็ตภาพ</button>
-  </div>
-
-  <!-- View toggle -->
-  <div class="view-toggle">
-    <button id="btnViewOriginal" class="active" onclick="switchView('original')">ภาพต้นฉบับ + เส้น</button>
-    <button id="btnViewEdge"                    onclick="switchView('edge')">Edge detection</button>
-  </div>
-
-  <!-- Canvas display area -->
-  <div class="canvas-wrapper" id="canvasWrapper">
-    <div class="canvas-placeholder" id="placeholder">
-      ยังไม่มีภาพ<br>กดถ่ายภาพหรืออัปโหลดเพื่อเริ่มต้น
-    </div>
-    <div id="zoomLayer">
-      <canvas id="canvas"></canvas>
-    </div>
-    <div class="meas-hint" id="measHint">คลิกที่ขอบบนสุดของกองเหล็ก</div>
-
-    <!-- Floating counting toolbar -->
-    <div id="floatToolbar">
-      <div class="ft-group">
-        <button class="ft-btn" id="fBtnManual" onclick="toggleManualMode()">✏️ นับมือ</button>
-        <button class="ft-btn" id="fBtnUndo"   onclick="undoManualDot()" disabled>↩</button>
-        <button class="ft-btn" id="fBtnClearDots" onclick="clearManualDots()">🗑</button>
-      </div>
-      <div class="ft-sep"></div>
-      <div class="ft-group">
-        <button class="ft-btn" id="fBtnLines" onclick="toggleCVLines()">เส้น</button>
-        <button class="ft-btn" id="fBtnColor" onclick="toggleFalseColor()">ย้อมสี</button>
-      </div>
-      <div class="ft-sep"></div>
-      <div class="ft-group">
-        <span class="ft-lbl">AUTO</span>
-        <input class="ft-slider" type="range" id="fBadgeSize" min="0.5" max="3.0" step="0.1" value="1.0"
-               oninput="badgeSizeMultiplier=parseFloat(this.value); redrawOverlays()">
-        <span class="ft-lbl">มือ</span>
-        <input class="ft-slider" type="range" id="fDotSize" min="0.4" max="3.0" step="0.1" value="1.0"
-               oninput="dotSizeMultiplier=parseFloat(this.value);
-                        document.getElementById('valDotSize').textContent=parseFloat(this.value).toFixed(1);
-                        document.getElementById('paramDotSize').value=this.value;
-                        redrawOverlays()">
-      </div>
-    </div>
-  </div>
-
-  <!-- Status bar -->
-  <div id="statusBar" class="info">รอภาพ...</div>
-
-  <!-- Result box -->
-  <div id="resultBox">
-    <div class="label">จำนวนแผ่นเหล็กที่ตรวจพบ</div>
-    <div class="count" id="sheetCount">–</div>
-  </div>
-
-  <!-- Manual count panel -->
-  <div class="manual-panel" id="manualPanel">
-    <div style="font-size:0.85rem;font-weight:600;color:#333">
-      นับเพิ่มด้วยมือ
-      <span style="font-size:0.75rem;font-weight:400;color:#888"> — จิ้มที่แต่ละแผ่นบนภาพ</span>
-    </div>
-    <div class="sub-toolbar" style="margin:0">
-      <button class="btn-sm orange" id="btnManualToggle" onclick="toggleManualMode()">เริ่มนับด้วยมือ</button>
-      <button class="btn-sm red"    id="btnManualUndo"   onclick="undoManualDot()" disabled>ย้อน 1</button>
-      <button class="btn-sm gray"   id="btnManualClear"  onclick="clearManualDots()">ล้างจุด</button>
-    </div>
-    <div class="adj-field" style="max-width:260px">
-      <label>ขนาดจุด <span id="valDotSize">1.0</span>×</label>
-      <input type="range" id="paramDotSize" min="0.4" max="3.0" step="0.1" value="1.0"
-             oninput="document.getElementById('valDotSize').textContent=parseFloat(this.value).toFixed(1); dotSizeMultiplier=parseFloat(this.value); redrawOverlays()">
-    </div>
-    <div class="manual-tally" id="manualTally">จิ้มที่แผ่นเหล็กแต่ละแผ่นเพื่อนับเพิ่ม</div>
-  </div>
-
-  <!-- OpenCV badge -->
-  <div id="opencvStatus">OpenCV: กำลังโหลด...</div>
-
-  <!-- OpenCV.js (async, asm.js build) -->
-  <script>
-    // OpenCV.js callback — called automatically when the library is ready
-    function onOpenCvReady() {
-      const badge = document.getElementById('opencvStatus');
-      badge.textContent = 'OpenCV: พร้อม';
-      badge.classList.add('ready');
-      setStatus('OpenCV โหลดสำเร็จ พร้อมประมวลผล', 'ok');
-      console.log('[OpenCV] version:', cv.getBuildInformation().split('\n')[0]);
-    }
-  </script>
-  <script
-    async
-    src="https://docs.opencv.org/4.10.0/opencv.js"
-    onload="onOpenCvReady()"
-    onerror="(() => {
-      const b = document.getElementById('opencvStatus');
-      b.textContent = 'OpenCV: โหลดไม่สำเร็จ';
-      b.classList.add('error');
-      setStatus('ไม่สามารถโหลด OpenCV.js ได้ ตรวจสอบการเชื่อมต่ออินเทอร์เน็ต', 'error');
-    })()"
-  ></script>
-
-  <script>
-    /* ============================================================
-       State
-    ============================================================ */
-    let currentImageData = null;
-    let currentObjectURL = null;
-
-    // ROI
-    let roi = null;
-    let roiDragStart = null;
-    let roiDragCurrent = null;
-    let roiSelectActive = false;
-    // Manual count
-    let manualDots = [];
-    let autoCountResult = 0;
-    let manualModeActive = false;
-    let dotSizeMultiplier  = 1.0;
-    let badgeSizeMultiplier = 1.0;
-    // CV display options
-    let showCVLines    = false;   // hide lines by default — badges only
-    let falseColorActive = false;
-    // Detected clusters (from CV)
-    let detectedClusters = [];   // [{avgY, lines, ox, removed}]
-    // Zoom + pan
-    let zoomScale = 1;
-    let panX = 0, panY = 0;
-    let pinchStartDist = null;
-    let pinchStartScale = 1;
-    let pinchStartPanX = 0, pinchStartPanY = 0;
-    let isPanning = false;
-    let panPointerStart = null;
-    let doubleTapTimer = null;
-    // Brightness / contrast
-    let brightnessAdj = 0;
-    let contrastAdj   = 0;
-    // Debounce
-    let processTimer = null;
-
-    /* ============================================================
-       DOM refs
-    ============================================================ */
-    const canvas        = document.getElementById('canvas');
-    const ctx           = canvas.getContext('2d');
-    const zoomLayer     = document.getElementById('zoomLayer');
-    const placeholder   = document.getElementById('placeholder');
-    const btnCamera     = document.getElementById('btnCamera');
-    const btnUpload     = document.getElementById('btnUpload');
-    const btnProcess    = document.getElementById('btnProcess');
-    const btnReset      = document.getElementById('btnReset');
-    const fileCamera    = document.getElementById('fileCamera');
-    const fileUpload    = document.getElementById('fileUpload');
-    const statusBar     = document.getElementById('statusBar');
-    const resultBox     = document.getElementById('resultBox');
-    const sheetCount    = document.getElementById('sheetCount');
-    const canvasWrapper = document.getElementById('canvasWrapper');
-    const btnZoneSelect = document.getElementById('btnZoneSelect');
-    const btnZoneClear  = document.getElementById('btnZoneClear');
-    const zoneInfo      = document.getElementById('zoneInfo');
-    const manualPanel   = document.getElementById('manualPanel');
-    const btnManualToggle = document.getElementById('btnManualToggle');
-    const btnManualUndo   = document.getElementById('btnManualUndo');
-    const manualTally     = document.getElementById('manualTally');
-
-    /* ============================================================
-       Helpers
-    ============================================================ */
-    function setStatus(msg, type = 'info') {
-      statusBar.textContent = msg;
-      statusBar.className = type;
-    }
-
-    // Convert client (screen) coords → canvas internal pixel coords
-    // Works correctly regardless of CSS zoom/transform on parents
-    function cssToCanvas(clientX, clientY) {
-      const r = canvas.getBoundingClientRect();
-      return {
-        x: Math.round((clientX - r.left) * canvas.width  / r.width),
-        y: Math.round((clientY - r.top)  * canvas.height / r.height)
-      };
-    }
-
-    function normalizeRect(p1, p2) {
-      return {
-        x: Math.min(p1.x, p2.x),
-        y: Math.min(p1.y, p2.y),
-        w: Math.abs(p2.x - p1.x),
-        h: Math.abs(p2.y - p1.y)
-      };
-    }
-
-    // Debounced auto-process (only in CV mode)
-    function debouncedProcess() {
-      clearTimeout(processTimer);
-      processTimer = setTimeout(() => {
-        if (currentImageData && activeMode === 'cv') processImage();
-      }, 700);
-    }
-
-    // ---- Brightness / contrast pixel adjustment ----
-    function getAdjustedImageData() {
-      if (!currentImageData) return null;
-      if (brightnessAdj === 0 && contrastAdj === 0) return currentImageData;
-      const src = currentImageData.data;
-      const adj = new ImageData(canvas.width, canvas.height);
-      const dst = adj.data;
-      const contrast   = 1 + contrastAdj / 100;
-      const brightness = brightnessAdj;
-      for (let i = 0; i < src.length; i += 4) {
-        for (let c = 0; c < 3; c++) {
-          let v = (src[i+c] - 128) * contrast + 128 + brightness;
-          dst[i+c] = Math.max(0, Math.min(255, Math.round(v)));
-        }
-        dst[i+3] = src[i+3];
-      }
-      return adj;
-    }
-
-    function onAdjChange() {
-      brightnessAdj = parseInt(document.getElementById('paramBrightness').value);
-      contrastAdj   = parseInt(document.getElementById('paramContrast').value);
-      redrawOverlays();
-      debouncedProcess();
-    }
-
-    function resetAdj() {
-      brightnessAdj = 0; contrastAdj = 0;
-      document.getElementById('paramBrightness').value = 0;
-      document.getElementById('paramContrast').value   = 0;
-      document.getElementById('valBrightness').textContent = '0';
-      document.getElementById('valContrast').textContent   = '0';
-      redrawOverlays();
-      debouncedProcess();
-    }
-
-    // ---- Pixel post-processing after drawing base ----
-    function applyBrightnessContrast() {
-      if (brightnessAdj === 0 && contrastAdj === 0) return;
-      const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-      const d = imgData.data;
-      const contrast = 1 + contrastAdj / 100;
-      for (let i = 0; i < d.length; i += 4) {
-        for (let c = 0; c < 3; c++) {
-          let v = (d[i+c] - 128) * contrast + 128 + brightnessAdj;
-          d[i+c] = Math.max(0, Math.min(255, Math.round(v)));
-        }
-      }
-      ctx.putImageData(imgData, 0, 0);
-    }
-
-    function applyFalseColor() {
-      const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-      const d = imgData.data;
-      for (let i = 0; i < d.length; i += 4) {
-        const g = (0.299 * d[i] + 0.587 * d[i+1] + 0.114 * d[i+2]) / 255;
-        let r, gr, b;
-        if      (g < 0.25) { r = 0;              gr = g * 4 * 255;       b = 255; }
-        else if (g < 0.5)  { r = 0;              gr = 255;               b = (0.5-g)*4*255; }
-        else if (g < 0.75) { r = (g-0.5)*4*255;  gr = 255;               b = 0; }
-        else               { r = 255;             gr = (1-g)*4*255;       b = 0; }
-        d[i] = Math.round(r); d[i+1] = Math.round(gr); d[i+2] = Math.round(b);
-      }
-      ctx.putImageData(imgData, 0, 0);
-    }
-
-    // ---- Draw base image (CV result or adjusted original) ----
-    function drawBaseImage() {
-      if (activeMode === 'cv' && currentView === 'edge' && lastEdgeMat) {
-        cv.imshow(canvas, lastEdgeMat);
-        applyBrightnessContrast();
-      } else if (activeMode === 'cv' && lastResultMat) {
-        cv.imshow(canvas, lastResultMat);
-        applyBrightnessContrast();
-      } else if (currentImageData) {
-        ctx.putImageData(getAdjustedImageData(), 0, 0);
-      }
-      if (falseColorActive) applyFalseColor();
-    }
-
-    // ---- Redraw all overlays on top of base image ----
-    function redrawOverlays() {
-      drawBaseImage();
-
-      // ROI rectangle (live drag or confirmed)
-      const rr = (roiDragStart && roiDragCurrent)
-        ? normalizeRect(roiDragStart, roiDragCurrent)
-        : roi;
-      if (rr) {
-        ctx.save();
-        ctx.strokeStyle = '#22d3ee';
-        ctx.lineWidth = Math.max(2, canvas.width / 500);
-        ctx.setLineDash([10, 5]);
-        ctx.strokeRect(rr.x, rr.y, rr.w, rr.h);
-        ctx.fillStyle = 'rgba(34,211,238,0.07)';
-        ctx.fillRect(rr.x, rr.y, rr.w, rr.h);
-        ctx.restore();
-      }
-
-      // CV detected lines + cluster badges (drawn via ctx for interactivity)
-      if (activeMode === 'cv' && detectedClusters.length > 0) {
-        const lw = Math.max(2, canvas.width / 500);
-        const br = Math.max(14, canvas.width / 65) * badgeSizeMultiplier;
-        let visIdx = 0;
-        detectedClusters.forEach(cl => {
-          const lx = cl.ox + br + 4, ly = Math.round(cl.avgY);
-          if (cl.removed) {
-            ctx.save();
-            if (showCVLines) {
-              ctx.globalAlpha = 0.18;
-              ctx.strokeStyle = '#aaa'; ctx.lineWidth = lw;
-              cl.lines.forEach(ln => {
-                ctx.beginPath(); ctx.moveTo(ln.x1, ln.y1); ctx.lineTo(ln.x2, ln.y2); ctx.stroke();
-              });
-              ctx.globalAlpha = 1;
-            }
-            ctx.fillStyle = 'rgba(150,150,150,0.45)';
-            ctx.beginPath(); ctx.arc(lx, ly, br, 0, Math.PI*2); ctx.fill();
-            ctx.strokeStyle = '#e94560'; ctx.lineWidth = Math.max(2, br * 0.18);
-            ctx.beginPath();
-            ctx.moveTo(lx - br*0.6, ly - br*0.6); ctx.lineTo(lx + br*0.6, ly + br*0.6);
-            ctx.stroke();
-            ctx.restore();
-          } else {
-            visIdx++;
-            ctx.save();
-            if (showCVLines) {
-              ctx.strokeStyle = '#ff3333'; ctx.lineWidth = lw;
-              cl.lines.forEach(ln => {
-                ctx.beginPath(); ctx.moveTo(ln.x1, ln.y1); ctx.lineTo(ln.x2, ln.y2); ctx.stroke();
-              });
-            }
-            ctx.fillStyle = '#ffc800';
-            ctx.beginPath(); ctx.arc(lx, ly, br, 0, Math.PI*2); ctx.fill();
-            ctx.fillStyle = '#000';
-            ctx.font = `bold ${Math.round(br * 1.05)}px sans-serif`;
-            ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-            ctx.fillText(String(visIdx), lx, ly);
-            ctx.restore();
-          }
-        });
-      }
-
-      // Thickness measurement lines
-      if (activeMode === 'thickness' && measurePts.length > 0) {
-        const colors = ['#facc15', '#f97316'];
-        const labels = ['TOP', 'BOT'];
-        measurePts.forEach((py, i) => {
-          ctx.save();
-          ctx.strokeStyle = colors[i];
-          ctx.lineWidth = Math.max(2, canvas.width / 300);
-          ctx.setLineDash([12, 6]);
-          ctx.beginPath(); ctx.moveTo(0, py); ctx.lineTo(canvas.width, py); ctx.stroke();
-          ctx.setLineDash([]);
-          const fh = Math.max(16, canvas.width / 40);
-          ctx.fillStyle = colors[i];
-          ctx.font = `bold ${Math.max(12, fh * 0.7)}px sans-serif`;
-          ctx.fillRect(4, py - fh, 52, fh);
-          ctx.fillStyle = '#000';
-          ctx.fillText(labels[i], 8, py - 3);
-          ctx.restore();
-        });
-        if (measurePts.length === 2) {
-          const [y1, y2] = [Math.min(...measurePts), Math.max(...measurePts)];
-          const cx2 = canvas.width - 30;
-          ctx.save();
-          ctx.strokeStyle = '#22d3ee';
-          ctx.lineWidth = Math.max(2, canvas.width / 400);
-          ctx.beginPath();
-          ctx.moveTo(cx2, y1); ctx.lineTo(cx2, y2);
-          ctx.moveTo(cx2-8, y1); ctx.lineTo(cx2+8, y1);
-          ctx.moveTo(cx2-8, y2); ctx.lineTo(cx2+8, y2);
-          ctx.stroke();
-          ctx.restore();
-        }
-      }
-
-      // Manual count dots
-      manualDots.forEach(d => {
-        const r = Math.max(14, canvas.width / 65) * dotSizeMultiplier;
-        ctx.save();
-        ctx.fillStyle = '#f97316';
-        ctx.beginPath(); ctx.arc(d.cx, d.cy, r, 0, Math.PI*2); ctx.fill();
-        ctx.strokeStyle = '#fff'; ctx.lineWidth = Math.max(2, r * 0.12); ctx.stroke();
-        ctx.fillStyle = '#fff';
-        ctx.font = `bold ${Math.round(r * 1.05)}px sans-serif`;
-        ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-        ctx.fillText(String(d.n), d.cx, d.cy);
-        ctx.restore();
-      });
-    }
-
-    function drawImageToCanvas(file) {
-      if (currentObjectURL) URL.revokeObjectURL(currentObjectURL);
-      currentObjectURL = URL.createObjectURL(file);
-
-      const img = new Image();
-      img.onload = () => {
-        canvas.width  = img.naturalWidth;
-        canvas.height = img.naturalHeight;
-        ctx.drawImage(img, 0, 0);
-        currentImageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-
-        placeholder.style.display = 'none';
-        canvas.style.display = 'block';
-        btnProcess.disabled = false;
-        btnReset.disabled   = false;
-        btnZoneSelect.disabled = false;
-        resultBox.style.display = 'none';
-        sheetCount.textContent  = '–';
-        manualPanel.classList.remove('visible');
-        manualDots = [];
-        autoCountResult = 0;
-        detectedClusters = [];
-        measurePts = [];
-        document.getElementById('imgAdjPanel').classList.add('visible');
-        document.getElementById('floatToolbar').classList.add('visible');
-        measInfo.textContent = '';
-        if (activeMode === 'thickness') showMeasHint(0);
-        setStatus(`โหลดภาพสำเร็จ: ${canvas.width} × ${canvas.height} px`, 'ok');
-      };
-      img.onerror = () => setStatus('ไม่สามารถโหลดไฟล์ภาพได้', 'error');
-      img.src = currentObjectURL;
-    }
-
-    function resetAll() {
-      if (currentObjectURL) { URL.revokeObjectURL(currentObjectURL); currentObjectURL = null; }
-      currentImageData = null;
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
-      canvas.style.display = 'none';
-      placeholder.style.display = '';
-      btnProcess.disabled = true;
-      btnReset.disabled   = true;
-      btnZoneSelect.disabled = true;
-      resultBox.style.display = 'none';
-      sheetCount.textContent  = '–';
-      manualPanel.classList.remove('visible');
-      manualDots = []; autoCountResult = 0; detectedClusters = [];
-      document.getElementById('imgAdjPanel').classList.remove('visible');
-      document.getElementById('floatToolbar').classList.remove('visible');
-      clearRoi();
-      if (manualModeActive) toggleManualMode();
-      resetZoom();
-      fileCamera.value = '';
-      fileUpload.value = '';
-      setStatus('รีเซ็ตแล้ว รอภาพใหม่...', 'info');
-    }
-
-    /* ============================================================
-       Event wiring
-    ============================================================ */
-    btnCamera.addEventListener('click', () => fileCamera.click());
-    btnUpload.addEventListener('click', () => fileUpload.click());
-
-    fileCamera.addEventListener('change', (e) => {
-      if (e.target.files[0]) drawImageToCanvas(e.target.files[0]);
-    });
-
-    fileUpload.addEventListener('change', (e) => {
-      if (e.target.files[0]) drawImageToCanvas(e.target.files[0]);
-    });
-
-    btnReset.addEventListener('click', () => {
-      resetAll();
-      measInfo.textContent = '';
-      hideMeasHint();
-      if (lastEdgeMat)   { try { lastEdgeMat.delete();   } catch(_){} lastEdgeMat   = null; }
-      if (lastResultMat) { try { lastResultMat.delete();  } catch(_){} lastResultMat = null; }
-    });
-
-    btnProcess.addEventListener('click', () => {
-      if (!currentImageData) { setStatus('กรุณาโหลดภาพก่อน', 'error'); return; }
-      processImage();
-    });
-
-    // Auto-reprocess when any slider in param panel changes
-    document.getElementById('paramPanel').addEventListener('input', debouncedProcess);
-
-    /* ============================================================
-       Zoom — pinch (touch) + wheel (desktop)
-    ============================================================ */
-    function clampPan() {
-      const maxPx = canvasWrapper.clientWidth  * (zoomScale - 1) / 2;
-      const maxPy = canvasWrapper.clientHeight * (zoomScale - 1) / 2;
-      panX = Math.max(-maxPx, Math.min(maxPx, panX));
-      panY = Math.max(-maxPy, Math.min(maxPy, panY));
-    }
-    function applyZoom() {
-      if (zoomScale <= 1) { panX = 0; panY = 0; }
-      zoomLayer.style.transform = zoomScale === 1
-        ? ''
-        : `translate(${panX}px, ${panY}px) scale(${zoomScale})`;
-      const canPan = zoomScale > 1 && !roiSelectActive && !manualModeActive;
-      document.body.classList.toggle('can-pan', canPan);
-    }
-    function resetZoom() { zoomScale = 1; panX = 0; panY = 0; applyZoom(); }
-
-    function getPinchDist(touches) {
-      const dx = touches[0].clientX - touches[1].clientX;
-      const dy = touches[0].clientY - touches[1].clientY;
-      return Math.sqrt(dx * dx + dy * dy);
-    }
-
-    let pinchCenterX = 0, pinchCenterY = 0;
-
-    canvasWrapper.addEventListener('touchstart', (e) => {
-      if (e.touches.length === 2) {
-        pinchStartDist  = getPinchDist(e.touches);
-        pinchStartScale = zoomScale;
-        pinchStartPanX  = panX;
-        pinchStartPanY  = panY;
-        // Pinch center relative to wrapper center
-        const wr = canvasWrapper.getBoundingClientRect();
-        pinchCenterX = ((e.touches[0].clientX + e.touches[1].clientX) / 2) - wr.left - wr.width  / 2;
-        pinchCenterY = ((e.touches[0].clientY + e.touches[1].clientY) / 2) - wr.top  - wr.height / 2;
-        e.preventDefault();
-      }
-    }, { passive: false });
-
-    canvasWrapper.addEventListener('touchmove', (e) => {
-      if (e.touches.length === 2 && pinchStartDist) {
-        const dist = getPinchDist(e.touches);
-        const wr = canvasWrapper.getBoundingClientRect();
-        // Current pinch center
-        const cx = ((e.touches[0].clientX + e.touches[1].clientX) / 2) - wr.left - wr.width  / 2;
-        const cy = ((e.touches[0].clientY + e.touches[1].clientY) / 2) - wr.top  - wr.height / 2;
-
-        const newScale = Math.max(1, Math.min(6, pinchStartScale * dist / pinchStartDist));
-        const ratio = newScale / pinchStartScale;
-        // Zoom toward pinch start center + translate by pinch center movement
-        panX = pinchCenterX * (1 - ratio) + pinchStartPanX * ratio + (cx - pinchCenterX);
-        panY = pinchCenterY * (1 - ratio) + pinchStartPanY * ratio + (cy - pinchCenterY);
-        zoomScale = newScale;
-        clampPan();
-        applyZoom();
-        e.preventDefault();
-      }
-    }, { passive: false });
-
-    canvasWrapper.addEventListener('touchend', (e) => {
-      if (e.touches.length < 2) pinchStartDist = null;
-      // Double-tap to reset zoom
-      if (e.changedTouches.length === 1 && zoomScale > 1) {
-        if (doubleTapTimer) {
-          clearTimeout(doubleTapTimer); doubleTapTimer = null; resetZoom();
-        } else {
-          doubleTapTimer = setTimeout(() => { doubleTapTimer = null; }, 300);
-        }
-      }
-    });
-
-    canvasWrapper.addEventListener('wheel', (e) => {
-      e.preventDefault();
-      const wr = canvasWrapper.getBoundingClientRect();
-      const mx = e.clientX - wr.left - wr.width  / 2;
-      const my = e.clientY - wr.top  - wr.height / 2;
-      const prevScale = zoomScale;
-      zoomScale = Math.max(1, Math.min(6, zoomScale * (e.deltaY > 0 ? 0.88 : 1.14)));
-      const ratio = zoomScale / prevScale;
-      panX = mx * (1 - ratio) + panX * ratio;
-      panY = my * (1 - ratio) + panY * ratio;
-      clampPan();
-      applyZoom();
-    }, { passive: false });
-
-    /* ============================================================
-       Canvas pointer events — ROI selection + Manual count
-    ============================================================ */
-    canvas.addEventListener('contextmenu', e => e.preventDefault());
-
-    canvas.addEventListener('pointerdown', (e) => {
-      if (!currentImageData) return;
-      e.preventDefault();
-      const pt = cssToCanvas(e.clientX, e.clientY);
-
-      // Right-click always pans (works in any mode)
-      if (e.button === 2) {
-        isPanning = true;
-        panPointerStart = { x: e.clientX - panX, y: e.clientY - panY };
-        canvas.setPointerCapture(e.pointerId);
-        document.body.classList.add('panning');
-        return;
-      }
-
-      // ROI drag
-      if (roiSelectActive) {
-        roiDragStart = pt;
-        roiDragCurrent = pt;
-        canvas.setPointerCapture(e.pointerId);
-        return;
-      }
-
-      // Cluster badge removal (CV mode) — tap on badge circle toggles removed
-      if (activeMode === 'cv' && detectedClusters.length > 0) {
-        const br = Math.max(14, canvas.width / 65);
-        for (const cl of detectedClusters) {
-          const lx = cl.ox + br + 4, ly = Math.round(cl.avgY);
-          if ((pt.x - lx) ** 2 + (pt.y - ly) ** 2 <= br * br) {
-            cl.removed = !cl.removed;
-            autoCountResult = detectedClusters.filter(c => !c.removed).length;
-            updateManualDisplay();
-            redrawOverlays();
-            return;
-          }
-        }
-      }
-
-      // Manual count tap
-      if (manualModeActive) {
-        const n = autoCountResult + manualDots.length + 1;
-        manualDots.push({ cx: pt.x, cy: pt.y, n });
-        updateManualDisplay();
-        redrawOverlays();
-        return;
-      }
-
-      // Pan when zoomed (single pointer, no active modes)
-      if (zoomScale > 1) {
-        isPanning = true;
-        panPointerStart = { x: e.clientX - panX, y: e.clientY - panY };
-        canvas.setPointerCapture(e.pointerId);
-        document.body.classList.add('panning');
-      }
-    });
-
-    canvas.addEventListener('pointermove', (e) => {
-      if (isPanning) {
-        panX = e.clientX - panPointerStart.x;
-        panY = e.clientY - panPointerStart.y;
-        clampPan();
-        applyZoom();
-        return;
-      }
-      if (!roiSelectActive || !roiDragStart) return;
-      roiDragCurrent = cssToCanvas(e.clientX, e.clientY);
-      redrawOverlays();
-    });
-
-    canvas.addEventListener('pointerup', (e) => {
-      if (isPanning) {
-        isPanning = false;
-        panPointerStart = null;
-        document.body.classList.remove('panning');
-        return;
-      }
-      if (!roiSelectActive || !roiDragStart) return;
-      const end = cssToCanvas(e.clientX, e.clientY);
-      const r   = normalizeRect(roiDragStart, end);
-      roiDragStart = null; roiDragCurrent = null;
-      setRoiSelectMode(false);
-      if (r.w > 15 && r.h > 15) {
-        roi = r;
-        btnZoneClear.style.display = '';
-        zoneInfo.textContent = `โซน ${r.w}×${r.h}px`;
-        debouncedProcess();
-      }
-      redrawOverlays();
-    });
-
-    /* ============================================================
-       ROI functions
-    ============================================================ */
-    function toggleRoiSelect() { setRoiSelectMode(!roiSelectActive); }
-
-    function setRoiSelectMode(active) {
-      roiSelectActive = active;
-      btnZoneSelect.classList.toggle('active', active);
-      document.body.classList.toggle('roi-select-mode', active);
-      if (!active) { roiDragStart = null; roiDragCurrent = null; }
-      applyZoom();  // refresh can-pan class
-    }
-
-    function clearRoi() {
-      roi = null; roiDragStart = null; roiDragCurrent = null;
-      btnZoneClear.style.display = 'none';
-      zoneInfo.textContent = '';
-      if (currentImageData) { redrawOverlays(); debouncedProcess(); }
-    }
-
-    /* ============================================================
-       Manual count functions
-    ============================================================ */
-    function toggleCVLines() {
-      showCVLines = !showCVLines;
-      document.getElementById('fBtnLines').classList.toggle('on-teal', showCVLines);
-      redrawOverlays();
-    }
-
-    function toggleFalseColor() {
-      falseColorActive = !falseColorActive;
-      document.getElementById('fBtnColor').classList.toggle('on-purple', falseColorActive);
-      redrawOverlays();
-    }
-
-    function toggleManualMode() {
-      manualModeActive = !manualModeActive;
-      btnManualToggle.classList.toggle('active', manualModeActive);
-      btnManualToggle.textContent = manualModeActive ? 'หยุดนับด้วยมือ' : 'เริ่มนับด้วยมือ';
-      document.body.classList.toggle('manual-count-mode', manualModeActive);
-      // Sync floating toolbar button
-      const fb = document.getElementById('fBtnManual');
-      fb.classList.toggle('on-orange', manualModeActive);
-      fb.textContent = manualModeActive ? '✏️ หยุด' : '✏️ นับมือ';
-      applyZoom();  // refresh can-pan class
-    }
-
-    function undoManualDot() {
-      if (!manualDots.length) return;
-      manualDots.pop();
-      updateManualDisplay();
-      redrawOverlays();
-    }
-
-    function clearManualDots() {
-      manualDots = [];
-      updateManualDisplay();
-      redrawOverlays();
-    }
-
-    function updateManualDisplay() {
-      const total = autoCountResult + manualDots.length;
-      sheetCount.textContent = total;
-      btnManualUndo.disabled = manualDots.length === 0;
-      document.getElementById('fBtnUndo').disabled = manualDots.length === 0;
-      if (manualDots.length === 0) {
-        manualTally.textContent = 'จิ้มที่แผ่นเหล็กแต่ละแผ่นเพื่อนับเพิ่ม';
-      } else {
-        manualTally.innerHTML =
-          `AUTO <strong>${autoCountResult}</strong> + มือ <strong>${manualDots.length}</strong>` +
-          ` = รวม <strong>${total}</strong> แผ่น`;
-      }
-    }
-
-    /* ============================================================
-       Mode switching — CV vs Thickness
-    ============================================================ */
-    let activeMode = 'cv';
-
-    function switchMode(mode) {
-      activeMode = mode;
-      document.getElementById('tabCV').classList.toggle('active', mode === 'cv');
-      document.getElementById('tabThickness').classList.toggle('active', mode === 'thickness');
-      document.body.classList.toggle('thickness-mode', mode === 'thickness');
-      document.getElementById('paramPanel').style.display = mode === 'cv' ? '' : 'none';
-      document.getElementById('thicknessPanel').classList.toggle('visible', mode === 'thickness');
-      document.querySelector('.view-toggle').style.display = mode === 'cv' ? '' : 'none';
-      document.getElementById('zoneToolbar').style.display = mode === 'cv' ? '' : 'none';
-      btnProcess.style.display = mode === 'cv' ? '' : 'none';
-
-      if (mode === 'thickness') {
-        measurePts = [];
-        if (currentImageData) { redrawOriginal(); showMeasHint(0); }
-      } else {
-        hideMeasHint();
-        measurePts = [];
-        if (currentImageData) redrawOverlays();
-      }
-    }
-
-    /* ============================================================
-       Thickness mode — two-click measurement
-    ============================================================ */
-    const measHint = document.getElementById('measHint');
-    const measInfo = document.getElementById('measInfo');
-    let measurePts = [];
-
-    function showMeasHint(step) {
-      measHint.style.display = 'block';
-      measHint.textContent = step === 0
-        ? 'คลิกที่ขอบบนสุดของกองเหล็ก'
-        : 'คลิกที่ขอบล่างสุดของกองเหล็ก';
-    }
-    function hideMeasHint() { measHint.style.display = 'none'; }
-
-    function onThicknessChange() {
-      const sel = document.getElementById('thicknessSelect').value;
-      document.getElementById('customThicknessField').style.display = sel === 'custom' ? '' : 'none';
-    }
-
-    function redrawOriginal() {
-      if (!currentImageData) return;
-      ctx.putImageData(currentImageData, 0, 0);
-    }
-
-    // Thickness mode clicks handled via pointerdown (only when not roiSelect/manual)
-    canvas.addEventListener('pointerdown', (e) => {
-      if (activeMode !== 'thickness' || !currentImageData) return;
-      if (roiSelectActive || manualModeActive) return;
-      e.preventDefault();
-      const pt = cssToCanvas(e.clientX, e.clientY);
-
-      if (measurePts.length >= 2) { measurePts = []; measInfo.textContent = ''; }
-      measurePts.push(pt.y);
-      redrawOverlays();
-
-      if (measurePts.length === 1) {
-        showMeasHint(1);
-        measInfo.textContent = `TOP: y = ${pt.y}px`;
-      } else {
-        hideMeasHint();
-        const heightPx = Math.abs(measurePts[1] - measurePts[0]);
-        measInfo.innerHTML =
-          `TOP: ${measurePts[0]}px &nbsp;|&nbsp; BOT: ${measurePts[1]}px &nbsp;|&nbsp; ` +
-          `<strong>ความสูงกอง: ${heightPx}px</strong> — กรอกความสูงจริง (mm) แล้วกด คำนวณ`;
-      }
-    });
-
-    function calcThickness() {
-      const sel = document.getElementById('thicknessSelect').value;
-      const customVal = parseFloat(document.getElementById('customThickness').value);
-      const thickness = sel === 'custom' ? customVal : parseFloat(sel);
-      const stackMm   = parseFloat(document.getElementById('stackHeightMm').value);
-
-      if (!thickness || thickness <= 0) {
-        setStatus('กรุณาเลือกหรือกรอกความหนาแผ่นเหล็ก', 'error'); return;
-      }
-      if (!stackMm || stackMm <= 0) {
-        setStatus('กรุณากรอกความสูงกองจริง (mm)', 'error'); return;
-      }
-
-      const raw   = stackMm / thickness;
-      const count = Math.round(raw);
-      autoCountResult = count;
-      manualDots = [];
-      displayResult(count);
-      setStatus(
-        `${stackMm} mm ÷ ${thickness} mm/แผ่น = ${raw.toFixed(2)} ≈ ${count} แผ่น`,
-        'ok'
-      );
-    }
-
-    /* ============================================================
-       View state — keeps original ImageData for toggling views
-    ============================================================ */
-    let lastEdgeMat   = null;   // cv.Mat of edge image (RGBA)
-    let lastResultMat = null;   // cv.Mat of original + overlay lines
-    let currentView   = 'original';
-
-    function switchView(mode) {
-      currentView = mode;
-      document.getElementById('btnViewOriginal').classList.toggle('active', mode === 'original');
-      document.getElementById('btnViewEdge').classList.toggle('active', mode === 'edge');
-      if (!lastEdgeMat && !lastResultMat) return;
-      if (mode === 'edge'     && lastEdgeMat)   cv.imshow(canvas, lastEdgeMat);
-      if (mode === 'original' && lastResultMat) cv.imshow(canvas, lastResultMat);
-      redrawOverlays();
-    }
-
-    /* ============================================================
-       Image Processing — Canny + HoughLinesP (with ROI support)
-    ============================================================ */
-    function processImage() {
-      if (typeof cv === 'undefined') {
-        setStatus('OpenCV ยังไม่พร้อม กรุณารอสักครู่...', 'error'); return;
-      }
-      if (!currentImageData) {
-        setStatus('กรุณาโหลดภาพก่อน', 'error'); return;
-      }
-
-      setStatus('กำลังประมวลผล...', 'info');
-      btnProcess.disabled = true;
-
-      setTimeout(() => {
-        let fullSrc, procSrc, gray, blurred, edges, lines, resultMat, edgeFull;
-        try {
-          let ksize     = parseInt(document.getElementById('paramBlur').value);
-          const cannyLow  = parseInt(document.getElementById('paramCannyLow').value);
-          const cannyHigh = parseInt(document.getElementById('paramCannyHigh').value);
-          const minLenPct = parseInt(document.getElementById('paramMinLen').value) / 100;
-          const tolerance = parseInt(document.getElementById('paramTolerance').value);
-          const maxGap    = parseInt(document.getElementById('paramGap').value);
-          if (ksize % 2 === 0) ksize++;
-
-          // ── Step 1: Restore original image to canvas, then imread ──
-          ctx.putImageData(currentImageData, 0, 0);
-          fullSrc = cv.imread(canvas);
-
-          // ── Step 2: Crop to ROI if set ─────────────────────────────
-          let ox = 0, oy = 0;   // ROI offset in full-image coords
-          if (roi && roi.w > 20 && roi.h > 20) {
-            const rx = Math.max(0, Math.min(roi.x, fullSrc.cols - 2));
-            const ry = Math.max(0, Math.min(roi.y, fullSrc.rows - 2));
-            const rw = Math.min(roi.w, fullSrc.cols - rx);
-            const rh = Math.min(roi.h, fullSrc.rows - ry);
-            if (rw > 10 && rh > 10) {
-              procSrc = fullSrc.roi(new cv.Rect(rx, ry, rw, rh)).clone();
-              ox = rx; oy = ry;
-            }
-          }
-          if (!procSrc) procSrc = fullSrc.clone();
-
-          // ── Step 3-4: Grayscale → Blur → Canny ────────────────────
-          gray    = new cv.Mat();
-          blurred = new cv.Mat();
-          edges   = new cv.Mat();
-          cv.cvtColor(procSrc, gray, cv.COLOR_RGBA2GRAY);
-          cv.GaussianBlur(gray, blurred, new cv.Size(ksize, ksize), 0);
-          cv.Canny(blurred, edges, cannyLow, cannyHigh);
-
-          // ── Step 5: HoughLinesP ────────────────────────────────────
-          lines = new cv.Mat();
-          const refWidth = roi ? Math.min(roi.w, procSrc.cols) : canvas.width;
-          cv.HoughLinesP(edges, lines, 1, Math.PI / 180, 40, refWidth * minLenPct, maxGap);
-
-          // ── Step 6: Filter + cluster horizontal lines ──────────────
-          const horiz = [];
-          for (let i = 0; i < lines.rows; i++) {
-            const x1 = lines.data32S[i*4]   + ox;
-            const y1 = lines.data32S[i*4+1] + oy;
-            const x2 = lines.data32S[i*4+2] + ox;
-            const y2 = lines.data32S[i*4+3] + oy;
-            const ang = Math.abs(Math.atan2(y2-y1, x2-x1) * 180 / Math.PI);
-            if (ang < 15 || ang > 165) horiz.push({ x1, y1, x2, y2, midY: (y1+y2)/2 });
-          }
-          horiz.sort((a, b) => a.midY - b.midY);
-          const clusters = [];
-          for (const ln of horiz) {
-            const last = clusters[clusters.length - 1];
-            if (!last || ln.midY - last.avgY > tolerance) {
-              clusters.push({ lines: [ln], avgY: ln.midY });
-            } else {
-              last.lines.push(ln);
-              last.avgY = last.lines.reduce((s,l) => s + l.midY, 0) / last.lines.length;
-            }
-          }
-
-          // ── Step 7: Build result overlay image ─────────────────────
-          resultMat = fullSrc.clone();
-          // Draw ROI border on result (only border — lines/badges drawn via ctx)
-          if (roi && roi.w > 20) {
-            cv.rectangle(resultMat,
-              new cv.Point(ox, oy),
-              new cv.Point(ox + procSrc.cols, oy + procSrc.rows),
-              new cv.Scalar(34, 211, 238, 255), 3);
-          }
-
-          // Store clusters for interactive overlay (drawn via redrawOverlays)
-          detectedClusters = clusters.map(cl => ({
-            lines:   cl.lines.map(l => ({ x1: l.x1, y1: l.y1, x2: l.x2, y2: l.y2 })),
-            avgY:    cl.avgY,
-            ox:      ox,
-            removed: false
-          }));
-
-          // ── Step 8: Build edge display image ───────────────────────
-          // Show edges in the processed region, original elsewhere
-          edgeFull = fullSrc.clone();
-          const edgeRGBA = new cv.Mat();
-          cv.cvtColor(edges, edgeRGBA, cv.COLOR_GRAY2RGBA);
-          // Paste edge image into the ROI region of edgeFull
-          const edgeDst = edgeFull.roi(new cv.Rect(ox, oy, procSrc.cols, procSrc.rows));
-          edgeRGBA.copyTo(edgeDst);
-          edgeRGBA.delete();
-
-          // ── Step 9: Store & display ────────────────────────────────
-          if (lastEdgeMat)   lastEdgeMat.delete();
-          if (lastResultMat) lastResultMat.delete();
-          lastEdgeMat   = edgeFull.clone();
-          lastResultMat = resultMat.clone();
-          edgeFull = null;   // don't delete in finally
-
-          cv.imshow(canvas, currentView === 'edge' ? lastEdgeMat : lastResultMat);
-          redrawOverlays();  // draw ROI rect + manual dots on top
-
-          // ── Step 10: Result ────────────────────────────────────────
-          autoCountResult = detectedClusters.filter(c => !c.removed).length;
-          manualDots = [];   // reset manual dots when auto reruns
-          displayResult(autoCountResult);
-          setStatus(
-            `ตรวจพบ ${autoCountResult} กลุ่มเส้นขอบ` +
-            (roi ? ` (ในโซน ROI)` : '') +
-            ` จาก ${horiz.length} เส้นแนวนอน`,
-            'ok'
-          );
-
-        } catch (err) {
-          setStatus('เกิดข้อผิดพลาด: ' + err.message, 'error');
-          console.error(err);
-        } finally {
-          [fullSrc, procSrc, gray, blurred, edges, lines, resultMat, edgeFull]
-            .forEach(m => { try { if (m && !m.isDeleted()) m.delete(); } catch(_){} });
-          btnProcess.disabled = false;
-        }
-      }, 50);
-    }
-
-    function displayResult(count) {
-      sheetCount.textContent  = count;
-      resultBox.style.display = 'block';
-      manualPanel.classList.add('visible');
-      updateManualDisplay();
-    }
-
-  </script>
 </body>
 </html>
