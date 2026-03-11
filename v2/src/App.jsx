@@ -438,7 +438,7 @@ export default function App() {
       let fullSrc, procSrc, gray, blurred, edges, lines
       try {
         const canvas = canvasRef.current
-        canvas.getContext('2d').putImageData(imageData, 0, 0)
+        canvas.getContext('2d').putImageData(getAdjusted(imageData), 0, 0)
         fullSrc = cv.imread(canvas)
 
         let ox=0, oy=0
@@ -498,7 +498,7 @@ export default function App() {
       let fullSrc, procSrc, gray, blurred, edges
       try {
         const canvas = canvasRef.current
-        canvas.getContext('2d').putImageData(imageData, 0, 0)
+        canvas.getContext('2d').putImageData(getAdjusted(imageData), 0, 0)
         fullSrc = cv.imread(canvas)
 
         let ox=0, oy=0, procH=fullSrc.rows
@@ -694,6 +694,23 @@ export default function App() {
               style={{padding:'5px 10px',border:'1.5px solid rgba(255,255,255,0.22)',
                 borderRadius:20,background:'rgba(255,255,255,0.1)',color:'#ddd',
                 fontSize:'0.76rem',cursor:'pointer'}}>🗑</button>
+
+            <div style={{width:1,height:22,background:'rgba(255,255,255,0.18)'}}/>
+            <button onClick={()=>{setRoiMode(v=>!v)}} style={{
+              padding:'5px 11px',
+              border:`1.5px solid ${roiMode?C.teal:(roi?'#22d3ee':'rgba(255,255,255,0.22)')}`,
+              borderRadius:20,
+              background:roiMode?C.teal:roi?'rgba(34,211,238,0.15)':'rgba(255,255,255,0.1)',
+              color:roiMode?'#fff':roi?'#22d3ee':'#ddd',
+              fontSize:'0.76rem',fontWeight:600,cursor:'pointer',
+            }}>{roiMode ? '✕ วาดโซน' : roi ? '📐 โซน✓' : '📐 โซน'}</button>
+            {roi && (
+              <button onClick={()=>{setRoi(null);setClusters([]);setAutoCount(0);setResult(null);setProfileData([])}} style={{
+                padding:'5px 9px',border:'1.5px solid rgba(255,255,255,0.22)',
+                borderRadius:20,background:'rgba(255,255,255,0.1)',color:'#ddd',
+                fontSize:'0.76rem',cursor:'pointer',
+              }}>ล้างโซน</button>
+            )}
 
             {(mode==='cv'||mode==='yprofile') && (<>
               <div style={{width:1,height:22,background:'rgba(255,255,255,0.18)'}}/>
