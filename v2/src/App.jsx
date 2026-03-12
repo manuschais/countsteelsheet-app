@@ -148,6 +148,7 @@ export default function App() {
   /* image adjustments */
   const [brightness,  setBrightness]  = useState(0)
   const [contrast,    setContrast]    = useState(0)
+  const [rotation,    setRotation]    = useState(0)
   const [falseColor,  setFalseColor]  = useState(false)
 
   /* roi */
@@ -205,6 +206,26 @@ export default function App() {
     return out
   }, [brightness, contrast])
 
+  /* returns ImageData after brightness/contrast + rotation applied */
+  const getTransformed = useCallback((src) => {
+    const adj = getAdjusted(src)
+    if (rotation === 0) return adj
+    const rad = rotation * Math.PI / 180
+    const tmp = document.createElement('canvas')
+    tmp.width = src.width; tmp.height = src.height
+    const ctx = tmp.getContext('2d')
+    ctx.fillStyle = '#000'
+    ctx.fillRect(0, 0, tmp.width, tmp.height)
+    // put adjusted image into an offscreen canvas to drawImage from
+    const off = document.createElement('canvas')
+    off.width = src.width; off.height = src.height
+    off.getContext('2d').putImageData(adj, 0, 0)
+    ctx.translate(src.width / 2, src.height / 2)
+    ctx.rotate(rad)
+    ctx.drawImage(off, -src.width / 2, -src.height / 2)
+    return ctx.getImageData(0, 0, tmp.width, tmp.height)
+  }, [getAdjusted, rotation])
+
   /* ── draw loop ── */
   useEffect(() => {
     if (!imageData) return
@@ -213,7 +234,7 @@ export default function App() {
     const W = canvas.width, H = canvas.height
 
     /* base */
-    ctx.putImageData(getAdjusted(imageData), 0, 0)
+    ctx.putImageData(getTransformed(imageData), 0, 0)
 
     /* false color */
     if (falseColor) {
@@ -313,8 +334,8 @@ export default function App() {
       ctx.fillText(String(d.n), d.cx, d.cy)
       ctx.restore()
     })
-  }, [imageData, brightness, contrast, falseColor, roi, mode, clusters, showLines,
-      badgeSize, manualDots, dotSize, profileData, getAdjusted])
+  }, [imageData, brightness, contrast, rotation, falseColor, roi, mode, clusters, showLines,
+      badgeSize, manualDots, dotSize, profileData, getTransformed])
 
   /* ── coord helper ── */
   const toCanvas = useCallback((cx, cy) => {
@@ -438,7 +459,7 @@ export default function App() {
       let fullSrc, procSrc, gray, blurred, edges, lines
       try {
         const canvas = canvasRef.current
-        canvas.getContext('2d').putImageData(getAdjusted(imageData), 0, 0)
+        canvas.getContext('2d').putImageData(getTransformed(imageData), 0, 0)
         fullSrc = cv.imread(canvas)
 
         let ox=0, oy=0
@@ -498,7 +519,7 @@ export default function App() {
       let fullSrc, procSrc, gray, blurred, edges
       try {
         const canvas = canvasRef.current
-        canvas.getContext('2d').putImageData(getAdjusted(imageData), 0, 0)
+        canvas.getContext('2d').putImageData(getTransformed(imageData), 0, 0)
         fullSrc = cv.imread(canvas)
 
         let ox=0, oy=0, procH=fullSrc.rows
@@ -779,7 +800,10 @@ export default function App() {
           <div style={{flex:1,minWidth:130}}>
             <Slider label="ความคมชัด" value={contrast} min={-50} max={100} step={5} onChange={setContrast} />
           </div>
-          <button onClick={()=>{setBrightness(0);setContrast(0)}}
+          <div style={{flex:1,minWidth:130}}>
+            <Slider label={`หมุนภาพ ${rotation}°`} value={rotation} min={-45} max={45} step={0.5} onChange={setRotation} />
+          </div>
+          <button onClick={()=>{setBrightness(0);setContrast(0);setRotation(0)}}
             style={{padding:'6px 12px',border:`1.5px solid ${C.border}`,borderRadius:6,
                     background:'transparent',color:C.muted,fontSize:'0.78rem',cursor:'pointer'}}>
             รีเซ็ต
