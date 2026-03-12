@@ -288,7 +288,7 @@ export default function App() {
       const br = Math.max(14, W/65) * badgeSize
       let visIdx = 0
       clusters.forEach(cl => {
-        const lx = cl.ox + br + 4, ly = Math.round(cl.avgY)
+        const lx = cl.ox + br + 4, ly = Math.round(cl.avgY) - br - 4
         ctx.save()
         if (cl.removed) {
           if (showLines && cl.lines.length) {
@@ -374,7 +374,7 @@ export default function App() {
     const br = Math.max(14, canvasRef.current.width/65) * badgeSize
     if ((mode==='cv'||mode==='yprofile') && clusters.length > 0) {
       const hit = clusters.find(cl => {
-        const lx=cl.ox+br+4, ly=Math.round(cl.avgY)
+        const lx=cl.ox+br+4, ly=Math.round(cl.avgY) - br - 4
         return (pt.x-lx)**2+(pt.y-ly)**2 <= br*br
       })
       if (hit) {
