@@ -808,6 +808,19 @@ export default function App() {
                     background:'transparent',color:C.muted,fontSize:'0.78rem',cursor:'pointer'}}>
             รีเซ็ต
           </button>
+          <button onClick={() => {
+            const off = document.createElement('canvas')
+            const td  = getTransformed(imageData)
+            off.width = td.width; off.height = td.height
+            off.getContext('2d').putImageData(td, 0, 0)
+            const a = document.createElement('a')
+            a.href     = off.toDataURL('image/png')
+            a.download = 'adjusted.png'
+            a.click()
+          }} style={{padding:'6px 12px',border:`1.5px solid ${C.accent}`,borderRadius:6,
+                     background:'rgba(96,165,250,0.12)',color:C.accent,fontSize:'0.78rem',cursor:'pointer',fontWeight:600}}>
+            💾 บันทึกภาพ
+          </button>
         </div>
       )}
 
